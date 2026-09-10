@@ -22,6 +22,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Dependency installation and download failures remain visible with actionable status rather than appearing stalled.
 - Ventoy preparation requests elevated privileges before device access, keeps its native confirmation prompt in the terminal, uses its default MBR-compatible layout, verifies the EFI fallback bootloader, and removes IsoForge-owned temporary mounts.
 - The generated man page now matches the Ventoy-first CLI description.
+- `burn` starts without `--config` again. The compatibility entrypoint expanded `CONFIG_FILE` before its default was assigned, and the assignment sat below the `exec` where nothing can reach it, so under `set -u` a bare `./burn` died on an unbound variable instead of opening the Ventoy UI.
+- `--dry-run` now refuses a base the build would refuse. It checked `compatibility.base_filename_patterns` only against a `--base-iso` override, so a recipe whose configured `catalog_id`, `base.url` or `base.iso` its own patterns forbid reported "Recipe is valid" and then failed the real build. Both branches now run the same check the build runs.
 
 ## 2026-09-03 — 2.1.3
 

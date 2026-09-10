@@ -160,9 +160,22 @@ main() {
         log_error "base.catalog_id '$base_id' is not in $CONFIG_FILE"
         exit 2
       fi
+      # The same guard the real build applies to the resolved base below, on
+      # the filename this recipe would download. Without it a dry-run reports
+      # "Recipe is valid" for a base the build then refuses.
+      if ! recipe_base_is_compatible "$url"; then
+        log_error "Base ISO is not compatible with this recipe: $(basename -- "$url")"
+        exit 2
+      fi
       log_info "Base:    $base_id -> $url"
     else
-      log_info "Base:    $(recipe_get '.base.url // .base.iso')"
+      local configured_base
+      configured_base=$(recipe_get '.base.url // .base.iso')
+      if ! recipe_base_is_compatible "$configured_base"; then
+        log_error "Base ISO is not compatible with this recipe: $(basename -- "$configured_base")"
+        exit 2
+      fi
+      log_info "Base:    $configured_base"
     fi
     log_info "Recipe is valid. Nothing was downloaded or written."
     exit 0

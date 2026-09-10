@@ -226,5 +226,72 @@ else
 fi
 check "an unknown catalog id resolves to nothing" "$(forge_catalog_url definitely-not-a-distro)" ""
 
+# --- dry-run agrees with the build about the base ---------------------------
+# The dry-run's whole job is to answer "will this build?". It used to answer
+# yes for a recipe whose configured base its own compatibility patterns
+# forbid, because it only checked the --base-iso override.
+forge_dry_run() { "$REPO_ROOT/inc/forge.sh" --recipe "$1" --dry-run >/dev/null 2>&1; }
+
+write "$TMP/dry-catalog-ok.yml" <<'EOF'
+recipe: dry-catalog-ok
+base:
+  catalog_id: Xubuntu_24_04_4_desktop_amd64
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+output:
+  name: dry-catalog-ok
+EOF
+if forge_dry_run "$TMP/dry-catalog-ok.yml"; then
+  ok "dry-run accepts a catalog base its patterns allow"
+else
+  bad "dry-run accepts a catalog base its patterns allow"
+fi
+
+write "$TMP/dry-catalog-bad.yml" <<'EOF'
+recipe: dry-catalog-bad
+base:
+  catalog_id: Xubuntu_24_04_4_desktop_amd64
+compatibility:
+  base_filename_patterns:
+    - '^kubuntu-25\.10-desktop-amd64\.iso$'
+output:
+  name: dry-catalog-bad
+EOF
+if forge_dry_run "$TMP/dry-catalog-bad.yml"; then
+  bad "dry-run rejects a catalog base its patterns forbid"
+else
+  ok "dry-run rejects a catalog base its patterns forbid"
+fi
+
+write "$TMP/dry-url-bad.yml" <<'EOF'
+recipe: dry-url-bad
+base:
+  url: https://example.invalid/isos/debian-13-netinst-amd64.iso
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+output:
+  name: dry-url-bad
+EOF
+if forge_dry_run "$TMP/dry-url-bad.yml"; then
+  bad "dry-run rejects a url base its patterns forbid"
+else
+  ok "dry-run rejects a url base its patterns forbid"
+fi
+
+write "$TMP/dry-no-patterns.yml" <<'EOF'
+recipe: dry-no-patterns
+base:
+  url: https://example.invalid/isos/anything.iso
+output:
+  name: dry-no-patterns
+EOF
+if forge_dry_run "$TMP/dry-no-patterns.yml"; then
+  ok "a recipe declaring no patterns is unaffected"
+else
+  bad "a recipe declaring no patterns is unaffected"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
