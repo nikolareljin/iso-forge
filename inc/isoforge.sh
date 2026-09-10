@@ -943,7 +943,7 @@ apply_ventoy_background() {
   # Reserve the top for the bundled logo and the bottom for Ventoy status.
   # The explicit menu box is deliberately wider and taller than the artwork's
   # central guide area because a real Ventoy menu can contain many ISO names.
-  printf 'desktop-image: "background.%s"\ntitle-text: "Ventoy"\n+ boot_menu {\n  left = 14%%\n  top = 32%%\n  width = 72%%\n  height = 56%%\n  item_height = 32\n}\n' "$ext" | \
+  printf 'desktop-image: "background.%s"\ntitle-text: "Ventoy"\n+ boot_menu {\n  left = 14%%\n  top = 32%%\n  width = 72%%\n  height = 56%%\n  item_font = "Unifont Regular 16"\n  selected_item_font = "Unifont Regular 16"\n  item_color = "#e5e7eb"\n  selected_item_color = "#ffffff"\n  item_height = 36\n  item_spacing = 8\n}\n' "$ext" | \
     "${prefix[@]}" tee "$vdir/theme.txt" >/dev/null || return 1
   "${prefix[@]}" mkdir -p "$mnt/ventoy" || return 1
   printf '%s\n' '{' '  "theme": {' '    "file": "/ventoy/theme/default/theme.txt",' '    "gfxmode": "max",' '    "display_mode": "GUI",' '    "ventoy_left": "3%",' '    "ventoy_top": "93%",' '    "ventoy_color": "#94a3b8"' '  }' '}' | \

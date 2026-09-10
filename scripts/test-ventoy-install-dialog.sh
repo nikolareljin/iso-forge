@@ -84,6 +84,8 @@ EOF
   [[ -f "$write_mnt/ventoy/theme/default/theme.txt" ]]
   grep -q 'top = 32%' "$write_mnt/ventoy/theme/default/theme.txt"
   grep -q 'height = 56%' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -q 'item_color = "#e5e7eb"' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -q 'selected_item_color = "#ffffff"' "$write_mnt/ventoy/theme/default/theme.txt"
   [[ -f "$write_mnt/ventoy/ventoy.json" ]]
   grep -q '"gfxmode": "max"' "$write_mnt/ventoy/ventoy.json"
   [[ -f "$write_mnt/test.iso" ]]
