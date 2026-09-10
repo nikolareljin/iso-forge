@@ -105,7 +105,15 @@ fi
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/nikos-install.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
-installer_url="${NIKOS_REPO_URL%/}/install.sh"
+# The repository URL is for git clone; fetching it directly would return the
+# GitHub HTML page. Fetch the installer source at the exact requested ref.
+github_repo="${NIKOS_REPO_URL#https://github.com/}"
+github_repo="${github_repo%.git}"
+if [[ "$github_repo" != */* ]]; then
+  echo "NikOS installer downloads require a GitHub repository URL." >&2
+  exit 2
+fi
+installer_url="https://raw.githubusercontent.com/${github_repo}/${NIKOS_REPO_REF}/install.sh"
 
 printf 'Starting %s (%s)…\n' "$NIKOS_PROFILE_LABEL" "$NIKOS_REPO_REF"
 download_installer "$installer_url" "$tmp"
