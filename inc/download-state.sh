@@ -110,6 +110,27 @@ derive_download_output_name() {
   printf '%s\n' "$output"
 }
 
+is_browser_url() {
+  [[ "${1:-}" == https://* ]]
+}
+
+open_browser_url() {
+  local url="$1"
+  local opener
+
+  is_browser_url "$url" || return 1
+  for opener in xdg-open gio open; do
+    command -v "$opener" >/dev/null 2>&1 || continue
+    if [[ "$opener" == gio ]]; then
+      gio open "$url" >/dev/null 2>&1 &
+    else
+      "$opener" "$url" >/dev/null 2>&1 &
+    fi
+    return 0
+  done
+  return 1
+}
+
 format_download_mib() {
   local bytes="${1:-0}"
   awk -v bytes="$bytes" 'BEGIN { printf "%.1f MiB", bytes / 1024 / 1024 }'

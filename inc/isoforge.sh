@@ -196,6 +196,27 @@ is_allowed_download_url() {
   return 1
 }
 
+open_browser_catalog_source() {
+  local id="$1" browser_url="$2"
+
+  if ! is_browser_url "$browser_url"; then
+    dialog --title "Unsupported browser URL" --msgbox \
+      "The selected source does not provide a safe HTTPS browser URL." 7 64
+    return 1
+  fi
+  if ! dialog --title "Open authenticated source" --yesno \
+    "${id} requires authentication and cannot be downloaded directly.\n\nOpen the vendor page in your browser now?" 10 72; then
+    return 2
+  fi
+  if ! open_browser_url "$browser_url"; then
+    dialog --title "Browser unavailable" --msgbox \
+      "Could not open a browser. Open this URL manually:\n\n${browser_url}" 10 76
+    return 1
+  fi
+  dialog --title "Browser opened" --msgbox \
+    "Complete the vendor download in your browser. When it finishes, return here and choose Local ISO files." 9 76
+}
+
 load_config() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
     print_error "Config file not found: $CONFIG_FILE"
@@ -358,7 +379,7 @@ select_images_from_config_multi() {
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
-  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url)"' "$CONFIG_FILE")
+  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // \"\")\t\(.browser_url // \"\")"' "$CONFIG_FILE")
   if [[ ${#rows[@]} -eq 0 ]]; then
     dialog --title "No distros" --msgbox "No distros defined in config.json" 8 50
     return 1
@@ -371,10 +392,11 @@ select_images_from_config_multi() {
     if [[ "$lower" == *"android-x86"* || "$lower" == *"bliss os"* || "$lower" == *"lineageos"* || "$lower" == *"grapheneos"* ]]; then echo "Android / Tablet"; return; fi
     if [[ "$lower" == *"gparted"* || "$lower" == *"rescue"* || "$lower" == *"hiren"* || "$lower" == *"clonezilla"* ]]; then echo "Utilities / Repair"; return; fi
     if [[ "$lower" == *"surface"* || "$lower" == *"xbox"* ]]; then echo "Surface / Xbox"; return; fi
+    if [[ "$lower" == *"server"* || "$lower" == *"proxmox"* || "$lower" == *"openmediavault"* || "$lower" == *"opnsense"* || "$lower" == *"pfsense"* || "$lower" == *"truenas"* ]]; then echo "Server / Infrastructure"; return; fi
     echo "Desktop / Linux"
   }
   for line in "${rows[@]}"; do
-    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; url="${line##*$'\t'}"
+    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"; url="${rest%%$'\t'*}"
     cat=$(distro_category "$id" "$label")
     if [[ "$cat" != "$prev_cat" ]]; then
       items+=("hdr_${cat// /_}" "==== $cat ====" off)
@@ -391,10 +413,22 @@ select_images_from_config_multi() {
   SELECTED_IMAGES=()
   local -a skipped_insecure=()
   local -a skipped_unsupported=()
-  local id url output path errs=0 download_failed=0
+  local id url browser_url output path errs=0 download_failed=0 browser_handoffs=0 browser_status
   for id in $chosen; do
     [[ "$id" == hdr_* ]] && continue
-    url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .url' "$CONFIG_FILE")
+    browser_url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .browser_url // empty' "$CONFIG_FILE")
+    if [[ -n "$browser_url" ]]; then
+      if open_browser_catalog_source "$id" "$browser_url"; then
+        browser_handoffs=$((browser_handoffs+1))
+      else
+        browser_status=$?
+        if (( browser_status != 2 )); then
+          errs=$((errs+1))
+        fi
+      fi
+      continue
+    fi
+    url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .url // empty' "$CONFIG_FILE")
     [[ -z "$url" || "$url" == "null" ]] && { errs=$((errs+1)); continue; }
     if [[ "$url" != https://* && "$url" != http://* ]]; then
       errs=$((errs+1))
@@ -437,6 +471,8 @@ select_images_from_config_multi() {
     SELECTED_IMAGE="${SELECTED_IMAGES[0]}"
   elif [[ ${#SELECTED_IMAGES[@]} -gt 1 ]]; then
     SELECTED_IMAGE=""
+  elif (( browser_handoffs > 0 )); then
+    return 1
   else
     dialog --title "Download" --msgbox "No files downloaded/selected." 7 40
     return 1
@@ -490,7 +526,7 @@ select_image_from_config() {
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
 
   # Build grouped menu options from config.json
-  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url)"' "$CONFIG_FILE")
+  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // \"\")\t\(.browser_url // \"\")"' "$CONFIG_FILE")
   if [[ ${#rows[@]} -eq 0 ]]; then
     dialog --title "No distros" --msgbox "No distros defined in config.json" 8 50
     return 1
@@ -504,10 +540,11 @@ select_image_from_config() {
     if [[ "$lower" == *"android-x86"* || "$lower" == *"bliss os"* || "$lower" == *"lineageos"* || "$lower" == *"grapheneos"* ]]; then echo "Android / Tablet"; return; fi
     if [[ "$lower" == *"gparted"* || "$lower" == *"rescue"* || "$lower" == *"hiren"* || "$lower" == *"clonezilla"* ]]; then echo "Utilities / Repair"; return; fi
     if [[ "$lower" == *"surface"* || "$lower" == *"xbox"* ]]; then echo "Surface / Xbox"; return; fi
+    if [[ "$lower" == *"server"* || "$lower" == *"proxmox"* || "$lower" == *"openmediavault"* || "$lower" == *"opnsense"* || "$lower" == *"pfsense"* || "$lower" == *"truenas"* ]]; then echo "Server / Infrastructure"; return; fi
     echo "Desktop / Linux"
   }
   for line in "${rows[@]}"; do
-    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; url="${line##*$'\t'}"
+    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"; url="${rest%%$'\t'*}"
     cat=$(distro_category "$id" "$label")
     if [[ "$cat" != "$prev_cat" ]]; then
       items+=("hdr_${cat// /_}" "==== $cat ====")
@@ -523,8 +560,13 @@ select_image_from_config() {
     break
   done
 
-  local url output path
-  url=$(jq -r --arg id "$chosen" '.distros[] | select(.id==$id) | .url' "$CONFIG_FILE")
+  local url browser_url output path
+  browser_url=$(jq -r --arg id "$chosen" '.distros[] | select(.id==$id) | .browser_url // empty' "$CONFIG_FILE")
+  if [[ -n "$browser_url" ]]; then
+    open_browser_catalog_source "$chosen" "$browser_url"
+    return 1
+  fi
+  url=$(jq -r --arg id "$chosen" '.distros[] | select(.id==$id) | .url // empty' "$CONFIG_FILE")
   if [[ -z "$url" || "$url" == "null" ]]; then
     dialog --title "Error" --msgbox "No URL found for selected distro." 8 50
     return 1

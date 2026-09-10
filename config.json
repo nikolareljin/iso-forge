@@ -53,6 +53,11 @@
       "url": "https://download.sys.truenas.net/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso"
     },
     {
+      "id": "pfSense_Netgate_Installer",
+      "label": "pfSense — Netgate Installer (requires free account; opens browser)",
+      "browser_url": "https://shop.netgate.com/products/netgate-installer"
+    },
+    {
       "id": "LinuxMint_22_Cinnamon_amd64",
       "label": "Linux Mint 22 Cinnamon — Intel/AMD 64-bit (amd64)",
       "url": "https://mirrors.edge.kernel.org/linuxmint/stable/22/linuxmint-22-cinnamon-64bit.iso"

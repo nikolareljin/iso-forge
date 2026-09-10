@@ -52,6 +52,7 @@ cd "$ROOT_DIR"
 ./scripts/test-ventoy-install-dialog.sh
 ./scripts/test-iso-creator.sh
 ./scripts/test-download-error-state.sh
+./scripts/test-browser-catalog-entry.sh
 ./scripts/test-download-progress.sh
 ./scripts/test-forge-recipe.sh
 ./scripts/test-forge-distrodeck.sh

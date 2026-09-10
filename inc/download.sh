@@ -149,12 +149,14 @@ distro_category() {
   if [[ "$lower" == *"android-x86"* || "$lower" == *"bliss os"* || "$lower" == *"lineageos"* || "$lower" == *"grapheneos"* ]]; then echo "Android / Tablet"; return; fi
   if [[ "$lower" == *"gparted"* || "$lower" == *"rescue"* || "$lower" == *"hiren"* || "$lower" == *"clonezilla"* ]]; then echo "Utilities / Repair"; return; fi
   if [[ "$lower" == *"surface"* || "$lower" == *"xbox"* ]]; then echo "Surface / Xbox"; return; fi
+  if [[ "$lower" == *"server"* || "$lower" == *"proxmox"* || "$lower" == *"openmediavault"* || "$lower" == *"opnsense"* || "$lower" == *"pfsense"* || "$lower" == *"truenas"* ]]; then echo "Server / Infrastructure"; return; fi
   echo "Desktop / Linux"
 }
 
 declare -A DISTROS
 declare -A URLS
-mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url)"' "$CONFIG_FILE")
+declare -A BROWSER_URLS
+mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // \"\")\t\(.browser_url // \"\")"' "$CONFIG_FILE")
 if [[ ${#rows[@]} -eq 0 ]]; then
   print_error "No distros defined in config.json"
   exit 1
@@ -163,9 +165,10 @@ fi
 items=()
 prev_cat=""
 for line in "${rows[@]}"; do
-  id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; url="${line##*$'\t'}"
+  id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"; url="${rest%%$'\t'*}"; browser_url="${rest#*$'\t'}"
   DISTROS["$id"]="$label"
   URLS["$id"]="$url"
+  BROWSER_URLS["$id"]="$browser_url"
   cat=$(distro_category "$id" "$label")
   if [[ "$cat" != "$prev_cat" ]]; then
     items+=("hdr_${cat// /_}" "==== $cat ====" off)
@@ -189,6 +192,19 @@ for id in $selected; do
   # Skip category headers if user selected them
   if [[ "$id" == hdr_* ]]; then continue; fi
   url="${URLS[$id]:-}"
+  browser_url="${BROWSER_URLS[$id]:-}"
+  if [[ -n "$browser_url" ]]; then
+    if ! is_browser_url "$browser_url"; then
+      print_error "Skipping $id due to unsupported browser URL: $browser_url"
+      errors=$((errors+1))
+    elif open_browser_url "$browser_url"; then
+      print_info "Opened $id in your browser. Complete the authenticated download there."
+    else
+      print_error "Could not open a browser for $id. Open this URL manually: $browser_url"
+      errors=$((errors+1))
+    fi
+    continue
+  fi
   if [[ -z "$url" || "$url" == "null" ]]; then
     print_error "No URL for $id in config.json"; errors=$((errors+1)); continue
   fi

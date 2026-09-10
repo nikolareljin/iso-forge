@@ -280,7 +280,7 @@ Configuration
     - Default in this repo: `~/Downloads/iso_images`
     - Runtime fallback if missing/empty: `$HOME/Downloads/iso_images`
   - `block_device_filter`: which drives to show; `usb` (default) or `any`.
-  - `distros`: array of `{ id, label, url }` items used by the "download from list" option.
+  - `distros`: array of direct-download `{ id, label, url }` items and authenticated `{ id, label, browser_url }` items. `browser_url` must be HTTPS; selecting one opens the vendor page rather than attempting an unauthenticated transfer.
 
 Example `config.json` snippet:
 
@@ -289,7 +289,8 @@ Example `config.json` snippet:
   "download_dir": "~/Downloads/iso_images",
   "block_device_filter": "usb",
   "distros": [
-    { "id": "Ubuntu_24_04_amd64", "label": "Ubuntu 24.04 LTS (amd64)", "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.1-desktop-amd64.iso" }
+    { "id": "Ubuntu_24_04_amd64", "label": "Ubuntu 24.04 LTS (amd64)", "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.1-desktop-amd64.iso" },
+    { "id": "Vendor_Installer", "label": "Vendor installer (requires account; opens browser)", "browser_url": "https://vendor.example/installer" }
   ]
 }
 ```
