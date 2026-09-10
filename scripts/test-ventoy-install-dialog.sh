@@ -58,7 +58,7 @@ EOF
   mount() {
     local target="${!#}"
     mkdir -p "$target/EFI/BOOT"
-    : >"$target/EFI/BOOT/BOOTX64.EFI"
+    printf 'efi loader' >"$target/EFI/BOOT/BOOTX64.EFI"
   }
   umount() { return 0; }
   sleep() { :; }

@@ -55,8 +55,8 @@ Use ISO Creator when the desired installer must contain a customized Ubuntu or X
 ### In the interface
 
 1. Choose **ISO Creator** from the main menu.
-2. Select a supported base ISO already stored in `download_dir`. Download it first through **Select Images**, or place it there yourself.
-3. Select a recipe. `recipes/example.yml` demonstrates packages, sources, overlays, and hooks. `recipes/nikos.yml` creates the post-install NikOS Xubuntu image.
+2. Select a recipe. `recipes/example.yml` demonstrates packages, sources, overlays, and hooks. `recipes/nikos.yml` creates the post-install NikOS Xubuntu image.
+3. Select a compatible base ISO already stored in `download_dir`. The chooser filters local files using the recipe's compatibility metadata. Download the supported base first through **Select Images**, or place it there yourself.
 4. Confirm the destination and start the build. IsoForge passes the selected config and `download_dir` to the builder, then reports the resulting ISO filename and directory when it finishes.
 5. Return to **Select Images**, choose the resulting ISO, and continue with USB preparation.
 

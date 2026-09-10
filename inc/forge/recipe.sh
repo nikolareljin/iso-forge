@@ -40,6 +40,18 @@ recipe_has() {
   [[ "$(jq -r "$1 // \"null\" | if . == \"null\" then \"no\" else \"yes\" end" <<<"$RECIPE_JSON")" == "yes" ]]
 }
 
+recipe_base_is_compatible() {
+  local base_path="$1" base_name pattern
+  local -a patterns=()
+  mapfile -t patterns < <(recipe_list '.compatibility.base_filename_patterns')
+  [[ ${#patterns[@]} -gt 0 ]] || return 0
+  base_name=$(basename -- "$base_path")
+  for pattern in "${patterns[@]}"; do
+    [[ "$base_name" =~ $pattern ]] && return 0
+  done
+  return 1
+}
+
 recipe_validate() {
   local path="$1"
   local errors=()
@@ -62,6 +74,12 @@ recipe_validate() {
   fi
 
   [[ "$(recipe_get '.output.name // ""')" != "" ]] || errors+=("output.name: required, the ISO filename without .iso")
+
+  if recipe_has '.compatibility'; then
+    local -a compatibility_patterns=()
+    mapfile -t compatibility_patterns < <(recipe_list '.compatibility.base_filename_patterns')
+    [[ ${#compatibility_patterns[@]} -gt 0 ]] || errors+=("compatibility.base_filename_patterns: required when compatibility is present")
+  fi
 
   # The build falls back to output.label when volume_id is absent, so the rules
   # below apply to whichever value ends up on the image. A label like

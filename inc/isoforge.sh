@@ -499,7 +499,7 @@ select_images_local_multi() {
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
-  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f \( -iname "*.iso" -o -iname "*.img" \) -print 2>/dev/null | sort)
+  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f \( -iname "*.iso" -o -iname "*.img" -o -iname "*.iso.xz" -o -iname "*.img.xz" -o -iname "*.iso.gz" -o -iname "*.img.gz" -o -iname "*.iso.bz2" -o -iname "*.img.bz2" \) -print 2>/dev/null | sort)
   if [[ ${#files[@]} -eq 0 ]]; then
     dialog --title "No boot images" --msgbox "No ISO or raw image files found in $DOWNLOAD_DIR. Run ./download to fetch images first." 9 70
     return 1
@@ -516,10 +516,23 @@ select_images_local_multi() {
     rm -f "$selection_file"
     return 1
   fi
-  SELECTED_IMAGES=()
-  mapfile -t SELECTED_IMAGES <"$selection_file"
+  local -a selected_paths=()
+  mapfile -t selected_paths <"$selection_file"
   rm -f "$selection_file"
-  [[ ${#SELECTED_IMAGES[@]} -gt 0 ]] || return 1
+  [[ ${#selected_paths[@]} -gt 0 ]] || return 1
+  SELECTED_IMAGES=()
+  local normalized_path
+  for p in "${selected_paths[@]}"; do
+    if ! normalized_path=$(normalize_ventoy_image "$p"); then
+      dialog --title "Image preparation failed" --msgbox         "Could not unpack the selected image:
+$p
+
+Install the required decompressor and try again." 10 72
+      SELECTED_IMAGES=()
+      return 1
+    fi
+    SELECTED_IMAGES+=("$normalized_path")
+  done
   if [[ ${#SELECTED_IMAGES[@]} -eq 1 ]]; then
     SELECTED_IMAGE="${SELECTED_IMAGES[0]}"
   elif [[ ${#SELECTED_IMAGES[@]} -gt 1 ]]; then
@@ -753,9 +766,9 @@ verify_ventoy_efi_bootloader() {
     mounted_here=1
   fi
 
-  if [[ ! -f "$efi_mount/EFI/BOOT/BOOTX64.EFI" && \
-        ! -f "$efi_mount/EFI/BOOT/BOOTIA32.EFI" && \
-        ! -f "$efi_mount/EFI/BOOT/BOOTAA64.EFI" ]]; then
+  if [[ ! -s "$efi_mount/EFI/BOOT/BOOTX64.EFI" && \
+        ! -s "$efi_mount/EFI/BOOT/BOOTIA32.EFI" && \
+        ! -s "$efi_mount/EFI/BOOT/BOOTAA64.EFI" ]]; then
     verified=0
   fi
 
@@ -849,10 +862,15 @@ flash_with_ventoy() {
   dialog --title "Success" --msgbox "Ventoy prepared, bootloader verified, and ISOs copied successfully." 7 72
 }
 
+ventoy_cache_dir() {
+  printf '%s\n' "${ISOFORGE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/isoforge}/ventoy"
+}
+
 ensure_ventoy_available() {
   VENTOY_BIN=""
-  local cand
-  for cand in "$REPO_ROOT/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/tools/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/Ventoy2Disk.sh"; do
+  local cand cache_dir
+  cache_dir=$(ventoy_cache_dir)
+  for cand in "$REPO_ROOT/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/tools/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/Ventoy2Disk.sh" "$cache_dir"/ventoy-*/Ventoy2Disk.sh; do
     [[ -x "$cand" ]] && VENTOY_BIN="$cand" && break
   done
   if [[ -z "$VENTOY_BIN" ]] && command -v Ventoy2Disk.sh >/dev/null 2>&1; then
@@ -879,17 +897,17 @@ ensure_ventoy_available() {
     # Download latest Ventoy release from GitHub
     print_info "Downloading Ventoy (latest) ..."
     local api="https://api.github.com/repos/ventoy/Ventoy/releases/latest"
-    local tag ver url tmpdir tarball outdir
+    local tag ver url tmpdir outdir
     tmpdir="$(mktemp -d)"
     if curl -fsSL "$api" -o "$tmpdir/latest.json"; then
       tag=$(jq -r .tag_name "$tmpdir/latest.json" 2>/dev/null || echo "")
       ver="${tag#v}"
       if [[ -n "$ver" ]]; then
         url="https://github.com/ventoy/Ventoy/releases/download/${tag}/ventoy-${ver}-linux.tar.gz"
-        mkdir -p "$REPO_ROOT/ventoy"
+        mkdir -p "$cache_dir"
         if curl -fL "$url" -o "$tmpdir/ventoy.tgz"; then
-          tar -xzf "$tmpdir/ventoy.tgz" -C "$REPO_ROOT/ventoy" || true
-          outdir=$(find "$REPO_ROOT/ventoy" -maxdepth 1 -type d -name "ventoy-*" | head -1)
+          tar -xzf "$tmpdir/ventoy.tgz" -C "$cache_dir" || true
+          outdir=$(find "$cache_dir" -maxdepth 1 -type d -name "ventoy-*" | head -1)
           if [[ -x "$outdir/Ventoy2Disk.sh" ]]; then
             VENTOY_BIN="$outdir/Ventoy2Disk.sh"
           fi
@@ -1132,7 +1150,22 @@ ensure_image_view_available() {
   rm -rf "$tmpdir"
 }
 
+iso_creator_base_matches_recipe() {
+  local recipe="$1" base_name="$2"
+  python3 - "$recipe" "$base_name" <<'PYTHON'
+import re
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    recipe = yaml.safe_load(stream) or {}
+patterns = (recipe.get("compatibility") or {}).get("base_filename_patterns") or []
+raise SystemExit(0 if not patterns or any(re.search(pattern, sys.argv[2]) for pattern in patterns) else 1)
+PYTHON
+}
+
 select_iso_creator_base() {
+  local recipe="$1"
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
@@ -1147,12 +1180,18 @@ select_iso_creator_base() {
 
   local file
   for file in "${files[@]}"; do
-    items+=("$file" "$(basename -- "$file")")
+    if iso_creator_base_matches_recipe "$recipe" "$(basename -- "$file")"; then
+      items+=("$file" "$(basename -- "$file")")
+    fi
   done
+  if [[ ${#items[@]} -eq 0 ]]; then
+    dialog --title "ISO Creator" --msgbox \
+      "No local ISO in $DOWNLOAD_DIR is compatible with $(basename -- "$recipe"). Download the recipe's supported base ISO first." 9 76
+    return 1
+  fi
   dialog --stdout --title "ISO Creator — Base ISO" --menu \
-    "Choose the local ISO to customize" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}"
+    "Choose a local ISO compatible with $(basename -- "$recipe")" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}"
 }
-
 select_iso_creator_recipe() {
   dialog_init
   local -a recipes=() items=()
@@ -1186,8 +1225,12 @@ print(name)
 
 create_iso() {
   local base_iso recipe created_iso
-  base_iso=$(select_iso_creator_base) || return 1
   recipe=$(select_iso_creator_recipe) || return 1
+  base_iso=$(select_iso_creator_base "$recipe") || return 1
+  if ! iso_creator_base_matches_recipe "$recipe" "$(basename -- "$base_iso")"; then
+    dialog --title "ISO Creator" --msgbox "The selected base ISO is not compatible with $(basename -- "$recipe")." 8 72
+    return 1
+  fi
   created_iso=$(iso_creator_output_path "$recipe") || created_iso="$DOWNLOAD_DIR"
 
   dialog --title "Create ISO" --yesno \

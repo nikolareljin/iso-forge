@@ -110,7 +110,7 @@ Parameters:
 
 Default Dependencies:
   dialog curl jq wget util-linux coreutils rsync exfatprogs parted
-  xorriso squashfs-tools python3-yaml
+  xorriso squashfs-tools python3-yaml xz-utils gzip bzip2
 HELP
 }
 

@@ -148,6 +148,10 @@ main() {
     local base_id
     base_id=$(recipe_get '.base.catalog_id // ""')
     if [[ -n "$BASE_ISO_OVERRIDE" ]]; then
+      if ! recipe_base_is_compatible "$BASE_ISO_OVERRIDE"; then
+        log_error "Base ISO is not compatible with this recipe: $BASE_ISO_OVERRIDE"
+        exit 2
+      fi
       log_info "Base:    $BASE_ISO_OVERRIDE (local override)"
     elif [[ -n "$base_id" ]]; then
       local url
@@ -180,6 +184,10 @@ main() {
   local rootfs="$WORK_DIR/rootfs"
 
   forge_resolve_base "$cache_dir" "$BASE_ISO_OVERRIDE" || exit $?
+  if ! recipe_base_is_compatible "$FORGE_BASE_ISO"; then
+    log_error "Resolved base ISO is not compatible with this recipe: $FORGE_BASE_ISO"
+    exit 2
+  fi
   forge_verify_base "$FORGE_BASE_ISO" || exit $?
 
   forge_extract_iso "$FORGE_BASE_ISO" "$iso_dir" || exit $?

@@ -39,6 +39,18 @@ for r in "$REPO_ROOT"/recipes/*.yml; do
   fi
 done
 
+recipe_load "$REPO_ROOT/recipes/nikos.yml" >/dev/null
+if recipe_base_is_compatible 'xubuntu-24.04.4-desktop-amd64.iso'; then
+  ok "NikOS accepts its Xubuntu 24.04 base"
+else
+  bad "NikOS accepts its Xubuntu 24.04 base"
+fi
+if recipe_base_is_compatible 'ubuntu-26.04-desktop-amd64.iso'; then
+  bad "NikOS rejects an incompatible Ubuntu base"
+else
+  ok "NikOS rejects an incompatible Ubuntu base"
+fi
+
 # --- required fields --------------------------------------------------------
 write "$TMP/no-name.yml" <<'EOF'
 recipe: t

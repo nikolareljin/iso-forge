@@ -14,6 +14,10 @@ recipe: nikos-postinstall-xubuntu
 base:
   catalog_id: Xubuntu_24_04_4_desktop_amd64
 
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+
 output:
   name: nikos-xubuntu-24.04-amd64
   volume_id: NIKOS_XUBUNTU_2404
