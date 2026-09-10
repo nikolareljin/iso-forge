@@ -293,5 +293,22 @@ else
   bad "a recipe declaring no patterns is unaffected"
 fi
 
+# --- dry-run and the build agree about the same base ------------------------
+# forge_resolve_base caches a download as basename "${url%%\?*}", so the
+# compatibility check has to ignore a query string too, or a supported URL is
+# refused by the dry-run and accepted by the build.
+recipe_load "$REPO_ROOT/recipes/nikos.yml" >/dev/null
+if recipe_base_is_compatible 'https://example.invalid/xubuntu-24.04.4-desktop-amd64.iso?download=1'; then
+  ok "a query string does not hide the filename"
+else
+  bad "a query string does not hide the filename"
+fi
+
+# --- a browser-only catalog entry is not a builder base ---------------------
+# jq -r prints the literal "null" for a missing key, which is not empty, so a
+# browser_url-only entry used to resolve and the build tried to fetch "null".
+check "a browser-only catalog id resolves to nothing" \
+  "$(forge_catalog_url pfSense_Netgate_Installer)" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

@@ -6,7 +6,10 @@ FORGE_BASE_ISO=""
 
 forge_catalog_url() {
   local id="$1"
-  jq -r --arg id "$id" '.distros[] | select(.id == $id) | .url' "$CONFIG_FILE" | head -1
+  # `// empty`, not a bare .url: browser-only entries carry browser_url and no
+  # url, and `jq -r` prints the literal "null" for a missing key -- which is
+  # not empty, so callers accepted it and the build tried to download "null".
+  jq -r --arg id "$id" '.distros[] | select(.id == $id) | .url // empty' "$CONFIG_FILE" | head -1
 }
 
 forge_catalog_ids() {

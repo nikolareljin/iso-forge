@@ -188,6 +188,8 @@ selected=$(sed 's/\"//g' <<<"$selected")
 pushd "$DOWNLOAD_DIR" >/dev/null
 clear_last_download_error
 errors=0
+handoffs=0
+downloads=0
 for id in $selected; do
   # Skip category headers if user selected them
   if [[ "$id" == hdr_* ]]; then continue; fi
@@ -199,6 +201,7 @@ for id in $selected; do
       errors=$((errors+1))
     elif open_browser_url "$browser_url"; then
       print_info "Opened $id in your browser. Complete the authenticated download there."
+      handoffs=$((handoffs+1))
     else
       print_error "Could not open a browser for $id. Open this URL manually: $browser_url"
       errors=$((errors+1))
@@ -221,12 +224,25 @@ for id in $selected; do
   if ! download_file_with_error_tracking "$url" "$output" "batch-download" "$id"; then
     print_error "Failed to download $id"
     errors=$((errors+1))
+  else
+    downloads=$((downloads+1))
   fi
 done
 popd >/dev/null
 
 if [[ "$errors" -eq 0 ]]; then
-  print_success "Download completed! Files saved to $DOWNLOAD_DIR"
+  # A browser handoff downloads nothing here: saying "files saved to ..." after
+  # a batch that only opened browser tabs names a directory that gained no file.
+  if (( downloads > 0 )); then
+    print_success "Download completed! Files saved to $DOWNLOAD_DIR"
+    if (( handoffs > 0 )); then
+      print_info "$handoffs selection(s) opened in your browser; finish those downloads there."
+    fi
+  elif (( handoffs > 0 )); then
+    print_success "Opened $handoffs selection(s) in your browser. Nothing was downloaded here; complete them there and save to $DOWNLOAD_DIR."
+  else
+    print_info "Nothing to download."
+  fi
 else
   print_warning "Completed with $errors error(s). Check logs."
   if has_last_download_error; then

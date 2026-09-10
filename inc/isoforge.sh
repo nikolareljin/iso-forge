@@ -1194,6 +1194,45 @@ ensure_image_view_available() {
   rm -rf "$tmpdir"
 }
 
+# The builder loads foo.yml, then deep-merges foo.local.yml over it
+# (inc/forge/recipe.sh recipe_load, documented in docs/BUILD.md). The ISO
+# Creator has to read a recipe the same way, or it decides compatibility and
+# names an output file from a recipe the build will not use.
+iso_creator_recipe_json() {
+  python3 - "$1" <<'PYTHON'
+import json
+import os
+import sys
+
+import yaml
+
+
+def load(path):
+    with open(path, encoding="utf-8") as stream:
+        return yaml.safe_load(stream) or {}
+
+
+def merge(base, overlay):
+    # jq's `*` on two objects merges recursively; anything else the right
+    # side replaces outright.
+    if isinstance(base, dict) and isinstance(overlay, dict):
+        out = dict(base)
+        for key, value in overlay.items():
+            out[key] = merge(out[key], value) if key in out else value
+        return out
+    return overlay
+
+
+path = sys.argv[1]
+recipe = load(path)
+stem, ext = os.path.splitext(path)
+local = f"{stem}.local{ext}" if ext in (".yml", ".yaml") else path + ".local"
+if os.path.isfile(local):
+    recipe = merge(recipe, load(local))
+json.dump(recipe, sys.stdout)
+PYTHON
+}
+
 iso_creator_base_matches_recipe() {
   local recipe="$1" base_name="$2" pattern has_patterns=0
   # Keep this matcher aligned with forge's Bash matcher: recipe patterns are
@@ -1203,16 +1242,7 @@ iso_creator_base_matches_recipe() {
     if printf '%s\n' "$base_name" | grep -Eq -- "$pattern"; then
       return 0
     fi
-  done < <(python3 - "$recipe" <<'PYTHON'
-import sys
-import yaml
-
-with open(sys.argv[1], encoding="utf-8") as stream:
-    recipe = yaml.safe_load(stream) or {}
-for pattern in (recipe.get("compatibility") or {}).get("base_filename_patterns") or []:
-    print(pattern)
-PYTHON
-)
+  done < <(iso_creator_recipe_json "$recipe" | jq -r '(.compatibility.base_filename_patterns // [])[]')
   (( has_patterns == 0 ))
 }
 
@@ -1247,7 +1277,10 @@ select_iso_creator_base() {
 select_iso_creator_recipe() {
   dialog_init
   local -a recipes=() items=()
-  mapfile -t recipes < <(find "$REPO_ROOT/recipes" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort)
+  # *.local.yml is an override layer, not a recipe on its own: it holds only
+  # the changed keys, so offering it here would fail validation in the builder.
+  mapfile -t recipes < <(find "$REPO_ROOT/recipes" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
+    ! -name '*.local.yml' ! -name '*.local.yaml' -print | sort)
   if [[ ${#recipes[@]} -eq 0 ]]; then
     dialog --title "ISO Creator" --msgbox "No recipe files found in $REPO_ROOT/recipes." 8 70
     return 1
@@ -1263,15 +1296,8 @@ select_iso_creator_recipe() {
 
 iso_creator_output_path() {
   local recipe="$1" output_name
-  output_name=$(python3 -c '
-import sys, yaml
-with open(sys.argv[1], encoding="utf-8") as stream:
-    recipe = yaml.safe_load(stream) or {}
-name = (recipe.get("output") or {}).get("name")
-if not isinstance(name, str) or not name:
-    raise SystemExit(1)
-print(name)
-' "$recipe" 2>/dev/null) || return 1
+  output_name=$(iso_creator_recipe_json "$recipe" 2>/dev/null | jq -r '.output.name // empty') || return 1
+  [[ -n "$output_name" ]] || return 1
   printf '%s/%s.iso\n' "$DOWNLOAD_DIR" "$output_name"
 }
 
