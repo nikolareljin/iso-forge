@@ -6,7 +6,7 @@
 # EXAMPLE: sudo isoforge build --recipe recipes/nikos.yml
 # PARAMETERS:
 #   download        Download one or more ISOs from config.json. Options: --config PATH, -h, --help.
-#   burn            Write an ISO from download_dir, or a browsed local ISO, to a drive. Options: --config PATH, -h, --help.
+#   burn            Prepare a Ventoy drive and copy selected ISO files to it. Options: --config PATH, -h, --help.
 #   build           Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
 #   setup           Install project dependencies. Parameters: PACKAGE. Options: -h, --help.
 #   help [COMMAND]  Show top-level help or command help for download, burn, build, or setup.

@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning when applicable.
 
+## 2026-09-10 — 2.2.0
+
+### Added
+- **Ventoy-first USB preparation.** The interactive workflow installs Ventoy on the selected removable drive, copies one or more chosen ISO files, checks available capacity, and can apply bundled IsoForge or NikOS backgrounds or a user-selected image. Ventoy's own confirmation remains in the terminal so its interactive prompt works reliably.
+- **ISO Creator.** `isoforge build` and the ISO Creator menu action turn a supported Ubuntu or Xubuntu base image plus a recipe into a new installable ISO. The completed image is written to the configured download directory, ready for the same Ventoy USB workflow.
+- **NikOS post-install image recipe.** The Xubuntu-based NikOS image deliberately retains the stock Xubuntu installer and adds an Install NikOS launcher. NikOS choices are made after the base system is installed, rather than being baked into the base ISO.
+- **Expanded curated catalog.** Ubuntu Server 24.04.4 and 26.04.1 for AMD64 and ARM64 join Ubuntu/Xubuntu 26.04.1, Proxmox VE, OpenMediaVault, OPNsense and TrueNAS Community entries.
+- **Authenticated source handoff.** Catalog entries with `browser_url` open the vendor's HTTPS page instead of attempting a transfer that requires a login. pfSense uses this flow.
+
+### Changed
+- Download progress now presents transferred and total sizes in MiB and calculates the percentage from byte counts.
+- Background previews use image-view gallery mode and stay open until the user exits them, followed by an explicit use-or-choose-another prompt.
+
+### Fixed
+- Setup uses `exfatprogs` instead of the obsolete `exfat-utils` package on current Debian and Ubuntu releases.
+- Dependency installation and download failures remain visible with actionable status rather than appearing stalled.
+- Ventoy preparation requests elevated privileges before device access and keeps its native confirmation prompt in the terminal.
+- The generated man page now matches the Ventoy-first CLI description.
+
 ## 2026-09-03 — 2.1.3
 
 ### Fixed

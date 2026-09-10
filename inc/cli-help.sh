@@ -2,7 +2,7 @@
 
 isoforge_main_help() {
   cat <<'HELP'
-Isoforge downloads Linux images, writes them to USB, and builds custom installable ISOs.
+Isoforge downloads Linux images, prepares Ventoy USB drives, and builds custom installable ISOs.
 
 Usage:
   isoforge [OPTIONS]
@@ -47,7 +47,7 @@ Environment:
 
 Config:
   download_dir   Directory where downloaded images are saved.
-  distros        Array of { id, label, url } items shown in the selector.
+  distros        Direct { id, label, url } or authenticated { id, label, browser_url } selector entries.
 HELP
 }
 

@@ -1,1 +1,32 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="IsoForge downloads and safely writes Linux ISO images to USB drives."><title>IsoForge — download and flash Linux images</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head><body><a class="skip" href="#main">Skip to content</a><header><div class="wrap"><a class="brand" href="index.html">IsoForge</a><nav><a href="index.html" aria-current="page">Overview</a><a href="about.html">About</a><a href="https://github.com/nikolareljin/iso-forge">GitHub</a></nav></div></header><main id="main"><div class="wrap"><p class="tag">Linux image tools</p><h1>From a Linux image to a ready USB drive.</h1><p class="lede">IsoForge is a terminal interface for choosing a curated Linux image, downloading it and writing it to removable media with clear, deliberate prompts.</p><div class="actions"><a class="btn primary" href="https://github.com/nikolareljin/iso-forge#readme">Get started</a><a class="btn" href="https://github.com/nikolareljin/iso-forge">View source</a></div><h2>Simple where it matters</h2><div class="cards"><article class="card"><h3>Curated images</h3><p>Find common desktop, recovery, security and lightweight images from one guided flow.</p></article><article class="card"><h3>Intentional flashing</h3><p>Select the image and target drive explicitly before data is written.</p></article><article class="card"><h3>Multi-image media</h3><p>Use the Ventoy path when one USB drive needs to carry more than one ISO.</p></article></div><div class="note"><strong>Repository rename in progress.</strong> IsoForge is moving from <code>burn-iso</code> to <code>iso-forge</code> so the repository name matches the tool. Once the move completes, the former repository and Pages URLs redirect here.</div><div class="note"><strong>Part of a connected tool suite.</strong> Explore <a href="https://nikolareljin.github.io/nikos/">NikOS</a>, <a href="https://nikolareljin.github.io/distrodeck/">Distrodeck</a>, <a href="https://nikolareljin.github.io/ai-runner/">ai-runner</a> and <a href="https://nikolareljin.github.io/kiosk-frame/">KioskFrame</a>.</div></div></main><footer><div class="wrap"><span>IsoForge</span><span><a href="about.html">About this work</a> · <a href="https://github.com/nikolareljin/iso-forge">GitHub</a></span></div></footer></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="IsoForge downloads Linux installer images, creates custom Ubuntu-family ISOs, and prepares Ventoy USB drives.">
+  <title>IsoForge — create ISOs and prepare Ventoy USB drives</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header><div class="wrap"><a class="brand" href="index.html">IsoForge</a><nav><a href="index.html" aria-current="page">Overview</a><a href="about.html">About</a><a href="https://github.com/nikolareljin/iso-forge">GitHub</a></nav></div></header>
+<main id="main"><div class="wrap">
+  <p class="tag">Linux image tools · 2.2.0</p>
+  <h1>Create the ISO. Prepare the USB. Boot what you need.</h1>
+  <p class="lede">IsoForge is a guided terminal application for downloading installer images, creating customized Ubuntu-family ISOs, and preparing Ventoy USB drives that boot one or many ISO files.</p>
+  <div class="actions"><a class="btn primary" href="https://github.com/nikolareljin/iso-forge#start-here">Get started</a><a class="btn" href="https://github.com/nikolareljin/iso-forge">View source and guide</a></div>
+  <h2>One workflow, three stages</h2>
+  <ol class="steps"><li><strong>Choose images.</strong> Download curated Linux, server, recovery, NAS, firewall and virtualization images, or select files already on disk.</li><li><strong>Create when needed.</strong> Use ISO Creator with a supported Ubuntu or Xubuntu base and a recipe to produce a new installable ISO.</li><li><strong>Prepare USB with Ventoy.</strong> Select the target drive, confirm the destructive action, then copy one or more ISO files to the freshly prepared Ventoy drive.</li></ol>
+  <div class="cards"><article class="card"><h3>Ventoy-first USB media</h3><p>Use the same path for one image or many. The application keeps Ventoy’s native confirmation prompt in the terminal, checks capacity, and copies the selected ISO files.</p></article><article class="card"><h3>ISO Creator</h3><p>Build a supported Ubuntu or Xubuntu installer ISO from a recipe. Packages, repositories, overlays and hooks become part of the new image.</p></article><article class="card"><h3>Authenticated sources</h3><p>When a vendor requires an account, IsoForge opens its HTTPS download page in the browser instead of issuing a transfer that cannot succeed.</p></article></div>
+  <h2>Customize the boot menu</h2>
+  <p>Choose a bundled IsoForge or NikOS Ventoy background, or select a PNG, JPG/JPEG, or TGA image. The gallery preview remains on screen until you exit it, then IsoForge asks whether to use it or choose another.</p>
+  <div class="note"><strong>Safety first.</strong> Preparing Ventoy erases the selected USB drive. Review the device name and confirmation dialog carefully before continuing.</div>
+  <h2>Ready to use</h2>
+  <p>Clone with submodules, run <code>./setup</code>, then start <code>./isoforge</code>. The complete guide, including ISO creation, NikOS post-install behavior, browser-authenticated downloads, and Ventoy USB preparation, is in the repository README.</p>
+</div></main>
+<footer><div class="wrap"><span>IsoForge 2.2.0</span><span><a href="about.html">About</a> · <a href="https://github.com/nikolareljin/iso-forge">GitHub</a></span></div></footer>
+</body>
+</html>
