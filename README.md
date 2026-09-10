@@ -35,8 +35,8 @@ git submodule update --init --recursive
 ## The normal workflow
 
 1. Start `./isoforge`.
-2. Select **Choose Distros (multi)** to download from the catalog, or select local ISO files that are already available.
-3. Select **Prepare USB**. Confirm the exact target drive—its existing data will be erased when Ventoy is installed.
+2. Select **Select ISO files**, then choose **Choose from curated distros** or a local-image option.
+3. Select **Prepare Ventoy USB**. Confirm the exact target drive—its existing data will be erased when Ventoy is installed.
 4. Optionally select a Ventoy background. Use the gallery preview, press `q` when finished reviewing it, then accept it or choose another image.
 5. IsoForge runs Ventoy's own installer in the terminal. Answer Ventoy's confirmation there.
 6. IsoForge mounts the newly prepared Ventoy partition and copies the selected ISOs. Boot the USB drive and choose an ISO from Ventoy’s menu.

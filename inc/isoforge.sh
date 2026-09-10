@@ -143,6 +143,7 @@ DEVICE_FILTER="usb"
 declare -a SELECTED_IMAGES=()
 # Ventoy uses this bundled background unless the user chooses another one.
 SELECTED_BACKGROUND="$REPO_ROOT/assets/ventoy/isoforge-background.png"
+VENTOY_OWNED_DATA_MOUNT=""
 
 restore_main_menu_snapshot() {
   local saved_image="$1"
@@ -813,9 +814,24 @@ cleanup_ventoy_data_mount() {
   rmdir "$mnt" 2>/dev/null || true
 }
 
+cleanup_owned_ventoy_mount() {
+  [[ -n "$VENTOY_OWNED_DATA_MOUNT" ]] || return 0
+  local mnt="$VENTOY_OWNED_DATA_MOUNT"
+  VENTOY_OWNED_DATA_MOUNT=""
+  if (( EUID == 0 )); then
+    cleanup_ventoy_data_mount "$mnt" || true
+  else
+    cleanup_ventoy_data_mount "$mnt" sudo || true
+  fi
+}
+
+cleanup_isoforge_exit() {
+  cleanup_owned_ventoy_mount
+  reset_tui
+}
+
 flash_with_ventoy() {
   if [[ ${#SELECTED_IMAGES[@]} -eq 0 ]]; then return 1; fi
-  ensure_ventoy_available || return 1
   local dev="/dev/$SELECTED_DEVICE"
   local prefix=(); command -v sudo >/dev/null 2>&1 && prefix=(sudo)
   flash_confirm || return 1
@@ -828,6 +844,7 @@ flash_with_ventoy() {
       return 1
     }
   fi
+  ensure_ventoy_available || return 1
   validate_ventoy_device "$dev" "${prefix[@]}" || return 1
 
   # Ventoy owns a safety confirmation of its own. Run it in the terminal so
@@ -873,6 +890,7 @@ flash_with_ventoy() {
       return 1
     fi
     mounted_here=1
+    VENTOY_OWNED_DATA_MOUNT="$mnt"
   fi
 
   if [[ -n "$SELECTED_BACKGROUND" && -f "$SELECTED_BACKGROUND" ]]; then
@@ -883,67 +901,81 @@ flash_with_ventoy() {
   sync || true
   if (( mounted_here )); then
     cleanup_ventoy_data_mount "$mnt" "${prefix[@]}" || result=1
+    VENTOY_OWNED_DATA_MOUNT=""
   fi
   (( result == 0 )) || return 1
   dialog --title "Success" --msgbox "Ventoy prepared, bootloader verified, and ISOs copied successfully." 7 72
 }
 
+# Retained for user-facing cache paths; executable discovery never uses it.
 ventoy_cache_dir() {
   printf '%s\n' "${ISOFORGE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/isoforge}/ventoy"
 }
 
+ventoy_system_cache_dir() {
+  printf '%s\n' /var/cache/isoforge/ventoy
+}
+
+ventoy_download_file() {
+  local url="$1" destination="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL "$url" -o "$destination"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$destination" "$url"
+  else
+    return 1
+  fi
+}
+
 ensure_ventoy_available() {
   VENTOY_BIN=""
-  local cand cache_dir
-  cache_dir=$(ventoy_cache_dir)
-  for cand in "$REPO_ROOT/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/tools/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/Ventoy2Disk.sh" "$cache_dir"/ventoy-*/Ventoy2Disk.sh; do
+  local cand root_cache api tag ver url tmpdir outdir
+  root_cache=$(ventoy_system_cache_dir)
+  # Never execute a Ventoy installer from a user-writable cache: this script
+  # subsequently runs with administrator privileges.
+  for cand in "$REPO_ROOT/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/tools/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/Ventoy2Disk.sh"; do
     [[ -x "$cand" ]] && VENTOY_BIN="$cand" && break
   done
   if [[ -z "$VENTOY_BIN" ]] && command -v Ventoy2Disk.sh >/dev/null 2>&1; then
     VENTOY_BIN=$(command -v Ventoy2Disk.sh)
   fi
   if [[ -z "$VENTOY_BIN" ]]; then
-    # Try to install via system package manager first
     if command -v apt-get >/dev/null 2>&1; then
       print_info "Installing ventoy via apt-get ..."
-      if sudo apt-get update && sudo apt-get install -y ventoy; then
-        if command -v Ventoy2Disk.sh >/dev/null 2>&1; then VENTOY_BIN=$(command -v Ventoy2Disk.sh); fi
-      fi
+      sudo apt-get update && sudo apt-get install -y ventoy || true
     elif command -v dnf >/dev/null 2>&1; then
       print_info "Installing ventoy via dnf ..."
       sudo dnf install -y ventoy || true
-      if command -v Ventoy2Disk.sh >/dev/null 2>&1; then VENTOY_BIN=$(command -v Ventoy2Disk.sh); fi
     elif command -v pacman >/dev/null 2>&1; then
       print_info "Installing ventoy via pacman ..."
       sudo pacman -S --noconfirm ventoy || true
-      if command -v Ventoy2Disk.sh >/dev/null 2>&1; then VENTOY_BIN=$(command -v Ventoy2Disk.sh); fi
     fi
+    command -v Ventoy2Disk.sh >/dev/null 2>&1 && VENTOY_BIN=$(command -v Ventoy2Disk.sh)
   fi
   if [[ -z "$VENTOY_BIN" ]]; then
-    # Download latest Ventoy release from GitHub
     print_info "Downloading Ventoy (latest) ..."
-    local api="https://api.github.com/repos/ventoy/Ventoy/releases/latest"
-    local tag ver url tmpdir outdir
-    tmpdir="$(mktemp -d)"
-    if curl -fsSL "$api" -o "$tmpdir/latest.json"; then
+    api="https://api.github.com/repos/ventoy/Ventoy/releases/latest"
+    tmpdir=$(mktemp -d) || return 1
+    if ventoy_download_file "$api" "$tmpdir/latest.json"; then
       tag=$(jq -r .tag_name "$tmpdir/latest.json" 2>/dev/null || echo "")
       ver="${tag#v}"
       if [[ -n "$ver" ]]; then
         url="https://github.com/ventoy/Ventoy/releases/download/${tag}/ventoy-${ver}-linux.tar.gz"
-        mkdir -p "$cache_dir"
-        if curl -fL "$url" -o "$tmpdir/ventoy.tgz"; then
-          tar -xzf "$tmpdir/ventoy.tgz" -C "$cache_dir" || true
-          outdir=$(find "$cache_dir" -maxdepth 1 -type d -name "ventoy-*" | head -1)
-          if [[ -x "$outdir/Ventoy2Disk.sh" ]]; then
-            VENTOY_BIN="$outdir/Ventoy2Disk.sh"
-          fi
+        # The archive is extracted only into a root-owned cache after sudo
+        # authentication, so a user-writable cache cannot be elevated later.
+        if ventoy_download_file "$url" "$tmpdir/ventoy.tgz" && \
+           sudo install -d -o root -g root -m 755 "$root_cache" && \
+           sudo rm -rf "$root_cache/ventoy-$ver" && \
+           sudo tar -xzf "$tmpdir/ventoy.tgz" -C "$root_cache"; then
+          outdir="$root_cache/ventoy-$ver"
+          [[ -x "$outdir/Ventoy2Disk.sh" ]] && VENTOY_BIN="$outdir/Ventoy2Disk.sh"
         fi
       fi
     fi
     rm -rf "$tmpdir"
   fi
   if [[ -z "$VENTOY_BIN" ]]; then
-    dialog --title "Ventoy not found" --msgbox "Could not locate or auto-install Ventoy.\nPlease install Ventoy and ensure Ventoy2Disk.sh is available.\nRef: https://www.ventoy.net/en/download.html" 11 70
+    dialog --title "Ventoy not found" --msgbox "Could not locate or install Ventoy. Ensure curl or wget is installed, then retry.\n\nRef: https://www.ventoy.net/en/download.html" 11 70
     return 1
   fi
   return 0
@@ -1366,7 +1398,7 @@ main_menu() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   parse_cli_args "$@"
   if [[ "${ISOFORGE_DISABLE_EXIT_TRAP:-0}" != "1" ]]; then
-    trap reset_tui EXIT INT TERM
+    trap cleanup_isoforge_exit EXIT INT TERM
   fi
   main_menu
 fi

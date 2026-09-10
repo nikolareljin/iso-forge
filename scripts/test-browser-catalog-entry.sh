@@ -44,6 +44,9 @@ EOF
   BROWSER_LOG="$browser_log" PATH="$fakebin:$PATH" open_browser_url "https://example.invalid/fallback"
   [[ "$(cat "$browser_log")" == "https://example.invalid/fallback" ]]
 
+  jq -e '.distros[] | select(.id == "Ubuntu_24_04_4_server_arm64") | .url == "https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.4-live-server-arm64.iso"' config.json >/dev/null
+  jq -e '.distros[] | select(.id == "Ubuntu_26_04_1_server_arm64") | .url == "https://cdimage.ubuntu.com/releases/26.04/release/ubuntu-26.04.1-live-server-arm64.iso"' config.json >/dev/null
+
   jq -e '.distros[] | select(.id == "pfSense_Netgate_Installer") |
     (.browser_url == "https://shop.netgate.com/products/netgate-installer") and
     (has("url") | not)' config.json >/dev/null
