@@ -15,21 +15,25 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   answer="$tmpdir/answer"
   cat >"$installer" <<EOF
 #!/usr/bin/env bash
-read -r reply
-printf '%s' "\$reply" >"$answer"
-printf 'Ventoy text output that belongs in a program box\n'
+if read -r reply; then
+  printf '%s' "\$reply" >"$answer"
+else
+  : >"$answer"
+fi
+printf 'Ventoy text output remains in the terminal\n'
 EOF
   chmod +x "$installer"
 
   programbox_seen="$tmpdir/programbox-seen"
   gauge_seen="$tmpdir/gauge-seen"
+  terminal_notice_seen="$tmpdir/terminal-notice-seen"
   REPO_ROOT="$tmpdir"
   # shellcheck disable=SC2317 # invoked indirectly by flash_with_ventoy
   dialog_init() { :; }
   dialog() {
     [[ "$*" == *--programbox* ]] && : >"$programbox_seen"
     [[ "$*" == *--gauge* ]] && : >"$gauge_seen"
-    if [[ "$*" == *--programbox* ]]; then cat >/dev/null; fi
+    [[ "$*" == *'Ventoy will now continue in the terminal'* ]] && : >"$terminal_notice_seen"
     return 0
   }
   sudo() {
@@ -55,8 +59,9 @@ EOF
   SELECTED_IMAGES=("$tmpdir/test.iso")
   : >"${SELECTED_IMAGES[0]}"
   flash_with_ventoy
-  [[ "$(cat "$answer")" == y ]]
-  [[ -f "$programbox_seen" ]]
+  [[ ! -s "$answer" ]]
+  [[ -f "$terminal_notice_seen" ]]
+  [[ ! -e "$programbox_seen" ]]
   [[ ! -e "$gauge_seen" ]]
 
   # Writes to the root-mounted data partition must use the supplied sudo path.

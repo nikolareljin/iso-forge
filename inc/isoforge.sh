@@ -668,19 +668,23 @@ flash_with_ventoy() {
   fi
   validate_ventoy_device "$dev" "${prefix[@]}" || return 1
 
-  # Ventoy writes regular text and asks for a final y/n confirmation. A dialog
-  # gauge only accepts its own XXX/percentage protocol, so that output both
-  # corrupts the display and leaves the confirmation unread. Authenticate
-  # before opening the programbox, then send the answer that the user already
-  # gave in flash_confirm.
+  # Ventoy owns a safety confirmation of its own. Run it in the terminal so
+  # its output and y/n prompt remain native and readable, rather than hiding
+  # them behind a dialog control or answering on the user's behalf.
+  dialog --title "Ventoy confirmation" --msgbox \
+    "Ventoy will now continue in the terminal and ask for its own confirmation.\n\nReview its device name carefully, answer there, then return here when it exits." 10 72
+  clear
+  printf 'Starting Ventoy for %s. Follow its terminal prompt.\n\n' "$dev"
   local errexit_was_on=0
   [[ $- == *e* ]] && errexit_was_on=1
   set +e
-  printf 'y\n' | "${prefix[@]}" bash "$VENTOY_BIN" -I -g "$dev" 2>&1 | \
-    dialog --title "Installing Ventoy" --programbox 20 "$DIALOG_WIDTH"
-  local -a ventoy_statuses=("${PIPESTATUS[@]}")
+  "${prefix[@]}" bash "$VENTOY_BIN" -I -g "$dev"
+  local vstatus=$?
   (( errexit_was_on )) && set -e
-  local vstatus="${ventoy_statuses[1]:-1}"
+  if { : </dev/tty; } 2>/dev/null; then
+    printf '\nVentoy exited with status %s. Press Enter to return to Isoforge. ' "$vstatus"
+    read -r _ </dev/tty || true
+  fi
   if [[ "$vstatus" -ne 0 ]]; then
     dialog --title "Ventoy" --msgbox "Ventoy installation failed (exit $vstatus). Review the installer output above." 8 72
     return 1
