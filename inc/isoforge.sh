@@ -325,7 +325,7 @@ ensure_deps() {
   command -v rsync >/dev/null 2>&1    || pkgs+=(rsync)
   command -v unzip >/dev/null 2>&1    || pkgs+=(unzip)
   command -v less  >/dev/null 2>&1    || pkgs+=(less)
-  command -v xz    >/dev/null 2>&1    || pkgs+=(xz xz-utils)
+  command -v xz    >/dev/null 2>&1    || pkgs+=("$(xz_dependency_package)")
   command -v gzip  >/dev/null 2>&1    || pkgs+=(gzip)
   command -v bzip2 >/dev/null 2>&1    || pkgs+=(bzip2)
 
@@ -336,6 +336,15 @@ ensure_deps() {
         "Dependencies failed to install.\n\nYou can review the log at:\n$log" 10 60
       return 1
     fi
+  fi
+}
+
+# Debian-family systems name this package xz-utils; Fedora and Arch use xz.
+xz_dependency_package() {
+  if command -v apt-get >/dev/null 2>&1; then
+    printf '%s\n' xz-utils
+  else
+    printf '%s\n' xz
   fi
 }
 
@@ -381,7 +390,7 @@ select_images_from_config_multi() {
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
-  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // \"\")\t\(.browser_url // \"\")"' "$CONFIG_FILE")
+  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // "")\t\(.browser_url // "")"' "$CONFIG_FILE")
   if [[ ${#rows[@]} -eq 0 ]]; then
     dialog --title "No distros" --msgbox "No distros defined in config.json" 8 50
     return 1
@@ -559,7 +568,7 @@ select_image_from_config() {
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
 
   # Build grouped menu options from config.json
-  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // \"\")\t\(.browser_url // \"\")"' "$CONFIG_FILE")
+  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // "")\t\(.browser_url // "")"' "$CONFIG_FILE")
   if [[ ${#rows[@]} -eq 0 ]]; then
     dialog --title "No distros" --msgbox "No distros defined in config.json" 8 50
     return 1
@@ -934,16 +943,21 @@ apply_ventoy_background() {
     *) dialog --title "Background" --msgbox "Unsupported image format: .$ext. Use jpg/png/tga." 8 60; return 1;;
   esac
   local bg="$vdir/background.$ext"
+  local menu_assets="$REPO_ROOT/assets/ventoy/ventoy-menu"
 
   # The Ventoy data partition is normally mounted by sudo and therefore owned
   # by root. Keep every write on that mounted filesystem on the same privilege
   # path; shell redirections are replaced with tee so they are elevated too.
   "${prefix[@]}" mkdir -p "$vdir" || return 1
   "${prefix[@]}" cp -f "$img" "$bg" || return 1
+  # Use Ventoy's own GUI assets so the selected row and scrollbar remain
+  # visible over every supplied background and long ISO lists can be scrolled.
+  "${prefix[@]}" cp -f "$menu_assets"/menu_*.png "$menu_assets"/select_c.png \
+    "$menu_assets"/slider_*.png "$vdir/" || return 1
   # Reserve the top for the bundled logo and the bottom for Ventoy status.
   # The explicit menu box is deliberately wider and taller than the artwork's
   # central guide area because a real Ventoy menu can contain many ISO names.
-  printf 'desktop-image: "background.%s"\ntitle-text: "Ventoy"\n+ boot_menu {\n  left = 14%%\n  top = 32%%\n  width = 72%%\n  height = 56%%\n  item_font = "Unifont Regular 16"\n  selected_item_font = "Unifont Regular 16"\n  item_color = "#e5e7eb"\n  selected_item_color = "#ffffff"\n  item_height = 36\n  item_spacing = 8\n}\n' "$ext" | \
+  printf 'desktop-image: "background.%s"\ntitle-text: "Ventoy"\n+ boot_menu {\n  left = 14%%\n  top = 32%%\n  width = 72%%\n  height = 56%%\n  item_font = "Unifont Regular 16"\n  selected_item_font = "Unifont Regular 16"\n  menu_pixmap_style = "menu_*.png"\n  item_color = "#e5e7eb"\n  selected_item_color = "#ffffff"\n  selected_item_pixmap_style = "select_*.png"\n  item_height = 36\n  item_spacing = 8\n  item_padding = 1\n  scrollbar = true\n  scrollbar_width = 10\n  scrollbar_thumb = "slider_*.png"\n}\n' "$ext" | \
     "${prefix[@]}" tee "$vdir/theme.txt" >/dev/null || return 1
   "${prefix[@]}" mkdir -p "$mnt/ventoy" || return 1
   printf '%s\n' '{' '  "theme": {' '    "file": "/ventoy/theme/default/theme.txt",' '    "gfxmode": "max",' '    "display_mode": "GUI",' '    "ventoy_left": "3%",' '    "ventoy_top": "93%",' '    "ventoy_color": "#94a3b8"' '  }' '}' | \
@@ -982,15 +996,17 @@ ensure_space_or_prune() {
 # archive. Keep the downloaded archive intact, then reuse an existing unpacked
 # sibling or create it atomically beside the source file.
 normalize_ventoy_image() {
-  local source="$1" output tool tmp
-  case "$source" in
-    *.xz)  output="${source%.xz}"; tool=xz ;;
-    *.gz)  output="${source%.gz}"; tool=gzip ;;
-    *.bz2) output="${source%.bz2}"; tool=bzip2 ;;
+  local source="$1" source_lower output tool tmp
+  source_lower=${source,,}
+  case "$source_lower" in
+    *.xz)  output="${source:0:${#source}-3}"; tool=xz ;;
+    *.gz)  output="${source:0:${#source}-3}"; tool=gzip ;;
+    *.bz2) output="${source:0:${#source}-4}"; tool=bzip2 ;;
     *) printf '%s\n' "$source"; return 0 ;;
   esac
   command -v "$tool" >/dev/null 2>&1 || return 1
-  if [[ ! -f "$output" ]]; then
+  # The archive is authoritative. Rebuild an absent, empty, or older sibling.
+  if [[ ! -s "$output" || "$source" -nt "$output" ]]; then
     tmp=$(mktemp "${output}.partial.XXXXXX") || return 1
     if ! "$tool" -dc -- "$source" >"$tmp"; then
       rm -f "$tmp"
@@ -1154,17 +1170,25 @@ ensure_image_view_available() {
 }
 
 iso_creator_base_matches_recipe() {
-  local recipe="$1" base_name="$2"
-  python3 - "$recipe" "$base_name" <<'PYTHON'
-import re
+  local recipe="$1" base_name="$2" pattern has_patterns=0
+  # Keep this matcher aligned with forge's Bash matcher: recipe patterns are
+  # POSIX extended regular expressions, not Python regular expressions.
+  while IFS= read -r pattern; do
+    has_patterns=1
+    if printf '%s\n' "$base_name" | grep -Eq -- "$pattern"; then
+      return 0
+    fi
+  done < <(python3 - "$recipe" <<'PYTHON'
 import sys
 import yaml
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     recipe = yaml.safe_load(stream) or {}
-patterns = (recipe.get("compatibility") or {}).get("base_filename_patterns") or []
-raise SystemExit(0 if not patterns or any(re.search(pattern, sys.argv[2]) for pattern in patterns) else 1)
+for pattern in (recipe.get("compatibility") or {}).get("base_filename_patterns") or []:
+    print(pattern)
 PYTHON
+)
+  (( has_patterns == 0 ))
 }
 
 select_iso_creator_base() {

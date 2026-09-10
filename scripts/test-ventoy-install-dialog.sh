@@ -29,6 +29,8 @@ EOF
   programbox_seen="$tmpdir/programbox-seen"
   gauge_seen="$tmpdir/gauge-seen"
   terminal_notice_seen="$tmpdir/terminal-notice-seen"
+  mkdir -p "$tmpdir/assets/ventoy"
+  cp -a "$ROOT_DIR/assets/ventoy/ventoy-menu" "$tmpdir/assets/ventoy/"
   REPO_ROOT="$tmpdir"
   # shellcheck disable=SC2317 # invoked indirectly by flash_with_ventoy
   dialog_init() { :; }
@@ -77,7 +79,9 @@ EOF
   write_mnt="$tmpdir/write-mnt"
   write_img="$tmpdir/background.png"
   : >"$write_img"
-  SELECTED_IMAGES=("$tmpdir/test.iso")
+  SELECTED_IMAGES=("$tmpdir/test.iso" "$tmpdir/second.iso" "$tmpdir/third.iso")
+  : >"$tmpdir/second.iso"
+  : >"$tmpdir/third.iso"
   apply_ventoy_background "$write_mnt" "$write_img" sudo
   copy_isos_to_ventoy "$write_mnt" sudo
   [[ -f "$write_mnt/ventoy/theme/default/background.png" ]]
@@ -86,9 +90,16 @@ EOF
   grep -q 'height = 56%' "$write_mnt/ventoy/theme/default/theme.txt"
   grep -q 'item_color = "#e5e7eb"' "$write_mnt/ventoy/theme/default/theme.txt"
   grep -q 'selected_item_color = "#ffffff"' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -q 'selected_item_pixmap_style = "select_*.png"' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -q 'scrollbar = true' "$write_mnt/ventoy/theme/default/theme.txt"
+  [[ -f "$write_mnt/ventoy/theme/default/select_c.png" ]]
+  [[ -f "$write_mnt/ventoy/theme/default/menu_c.png" ]]
+  [[ -f "$write_mnt/ventoy/theme/default/slider_c.png" ]]
   [[ -f "$write_mnt/ventoy/ventoy.json" ]]
   grep -q '"gfxmode": "max"' "$write_mnt/ventoy/ventoy.json"
   [[ -f "$write_mnt/test.iso" ]]
+  [[ -f "$write_mnt/second.iso" ]]
+  [[ -f "$write_mnt/third.iso" ]]
 )
 
 # Bundled backgrounds are PNG because Ventoy renders raster files reliably.

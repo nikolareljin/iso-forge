@@ -252,7 +252,7 @@ EOF
   fakebin_flow="$tmpdir/fakebin-flow"
   mkdir -p "$fakebin_flow"
   ln -s "$(command -v bash)" "$fakebin_flow/bash"
-  for tool in jq mkdir sed; do
+  for tool in jq mkdir sed mktemp rm; do
     ln -s "$(command -v "$tool")" "$fakebin_flow/$tool"
   done
   cat >"$fakebin_flow/dialog" <<'EOF'
@@ -329,7 +329,7 @@ EOF
   fakebin_multi_warning="$tmpdir/fakebin-multi-warning"
   mkdir -p "$fakebin_multi_warning"
   ln -s "$(command -v bash)" "$fakebin_multi_warning/bash"
-  for tool in jq mkdir sed cat; do
+  for tool in jq mkdir sed cat mktemp rm; do
     ln -s "$(command -v "$tool")" "$fakebin_multi_warning/$tool"
   done
   cat >"$fakebin_multi_warning/dialog" <<'EOF'

@@ -38,6 +38,18 @@ EOF
   [[ "$(cat "$normalized")" == 'raw image payload' ]]
   [[ "$(normalize_ventoy_image "$normalized")" == "$normalized" ]]
 
+  # A refreshed archive must replace its older unpacked sibling.
+  sleep 1
+  printf 'updated raw image payload' | gzip -c >"$archive"
+  [[ "$(normalize_ventoy_image "$archive")" == "$normalized" ]]
+  [[ "$(cat "$normalized")" == 'updated raw image payload' ]]
+
+  uppercase_archive="$download_dir/UPPER.IMG.GZ"
+  printf 'uppercase archive payload' | gzip -c >"$uppercase_archive"
+  uppercase_normalized=$(normalize_ventoy_image "$uppercase_archive")
+  [[ "$uppercase_normalized" == "$download_dir/UPPER.IMG" ]]
+  [[ "$(cat "$uppercase_normalized")" == 'uppercase archive payload' ]]
+
   ISOFORGE_CACHE_DIR="$tmpdir/cache"
   [[ "$(ventoy_cache_dir)" == "$tmpdir/cache/ventoy" ]]
 
@@ -52,4 +64,4 @@ grep -Fq 'dialog --stdout --separate-output' "$ROOT_DIR/inc/isoforge.sh"
 grep -Fq '"$cache_dir"/ventoy-*/Ventoy2Disk.sh' "$ROOT_DIR/inc/isoforge.sh"
 grep -Fq 'tar -xzf "$tmpdir/ventoy.tgz" -C "$cache_dir"' "$ROOT_DIR/inc/isoforge.sh"
 grep -Fq '! -s "$efi_mount/EFI/BOOT/BOOTX64.EFI"' "$ROOT_DIR/inc/isoforge.sh"
-grep -Fq 'xz-utils gzip bzip2' "$ROOT_DIR/inc/cli-help.sh"
+grep -Fq 'xz-utils (Debian/Ubuntu) or xz (Fedora/Arch)' "$ROOT_DIR/inc/cli-help.sh"

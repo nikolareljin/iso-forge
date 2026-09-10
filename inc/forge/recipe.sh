@@ -46,6 +46,8 @@ recipe_base_is_compatible() {
   mapfile -t patterns < <(recipe_list '.compatibility.base_filename_patterns')
   [[ ${#patterns[@]} -gt 0 ]] || return 0
   base_name=$(basename -- "$base_path")
+  # compatibility.base_filename_patterns uses POSIX extended regular
+  # expressions. The interactive ISO creator uses the same dialect.
   for pattern in "${patterns[@]}"; do
     [[ "$base_name" =~ $pattern ]] && return 0
   done
@@ -79,6 +81,15 @@ recipe_validate() {
     local -a compatibility_patterns=()
     mapfile -t compatibility_patterns < <(recipe_list '.compatibility.base_filename_patterns')
     [[ ${#compatibility_patterns[@]} -gt 0 ]] || errors+=("compatibility.base_filename_patterns: required when compatibility is present")
+    local compatibility_pattern regex_status
+    for compatibility_pattern in "${compatibility_patterns[@]}"; do
+      if grep -Eq -- "$compatibility_pattern" </dev/null; then
+        :
+      else
+        regex_status=$?
+        (( regex_status == 2 )) && errors+=("compatibility.base_filename_patterns: invalid POSIX ERE: $compatibility_pattern")
+      fi
+    done
   fi
 
   # The build falls back to output.label when volume_id is absent, so the rules

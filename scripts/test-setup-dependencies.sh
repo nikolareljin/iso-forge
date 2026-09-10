@@ -21,4 +21,6 @@ SETUP_PACKAGES_FILE="$packages_file" SCRIPT_HELPERS_DIR="$helpers_dir" \
 
 packages="$(cat "$packages_file")"
 [[ "$packages" == *"exfatprogs"* ]]
+[[ " $packages " == *" xz-utils "* ]]
+[[ " $packages " != *" xz xz-utils "* ]]
 [[ "$packages" != *"exfat-utils"* ]]
