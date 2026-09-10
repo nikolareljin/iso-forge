@@ -27,11 +27,22 @@ EOF
   old_path="$PATH"
   BROWSER_LOG="$browser_log" PATH="$fakebin:$PATH" open_browser_url "https://example.invalid/installer"
   PATH="$old_path"
-  for _ in {1..20}; do
-    [[ -f "$browser_log" ]] && break
-    /bin/sleep 0.05
-  done
   [[ "$(cat "$browser_log")" == "https://example.invalid/installer" ]]
+
+  # A failing opener must not be reported as a successful browser handoff.
+  cat >"$fakebin/xdg-open" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat >"$fakebin/gio" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == open ]]
+printf '%s\n' "$2" >"$BROWSER_LOG"
+EOF
+  chmod +x "$fakebin/xdg-open" "$fakebin/gio"
+  rm -f "$browser_log"
+  BROWSER_LOG="$browser_log" PATH="$fakebin:$PATH" open_browser_url "https://example.invalid/fallback"
+  [[ "$(cat "$browser_log")" == "https://example.invalid/fallback" ]]
 
   jq -e '.distros[] | select(.id == "pfSense_Netgate_Installer") |
     (.browser_url == "https://shop.netgate.com/products/netgate-installer") and

@@ -62,7 +62,7 @@ else
   # exfatprogs for mounting Ventoy exFAT, rsync for copy with progress
   # xorriso/squashfs-tools/python3-yaml are what `./forge` needs to build an image
   install_dependencies dialog curl jq wget util-linux coreutils rsync exfatprogs parted \
-    xorriso squashfs-tools python3-yaml
+    xorriso squashfs-tools python3-yaml xz-utils gzip bzip2
 fi
 
 print_success "Dependencies installed."

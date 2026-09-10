@@ -7,7 +7,7 @@
 # PARAMETERS:
 #   download        Download one or more ISOs from config.json. Options: --config PATH, -h, --help.
 #   burn            Prepare a Ventoy drive and copy selected ISO files to it. Options: --config PATH, -h, --help.
-#   build           Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
+#   build           Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, --base-iso PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
 #   setup           Install project dependencies. Parameters: PACKAGE. Options: -h, --help.
 #   help [COMMAND]  Show top-level help or command help for download, burn, build, or setup.
 #   --config PATH   Override config file path for the TUI flow.
@@ -101,7 +101,7 @@ parse_cli_args() {
         fi
         printf 'The interactive Ventoy workflow is used for burning.
 ' >&2
-        exec "$REPO_ROOT/inc/isoforge.sh"
+        exec env CONFIG_FILE="$CONFIG_FILE" "$REPO_ROOT/inc/isoforge.sh" "$@"
         ;;
       setup)
         shift
@@ -141,7 +141,8 @@ DOWNLOAD_DIR=""
 DEVICE_FILTER="usb"
 # Multi-image (Ventoy) and background support
 declare -a SELECTED_IMAGES=()
-SELECTED_BACKGROUND=""
+# Ventoy uses this bundled background unless the user chooses another one.
+SELECTED_BACKGROUND="$REPO_ROOT/assets/ventoy/isoforge-background.png"
 
 restore_main_menu_snapshot() {
   local saved_image="$1"
@@ -326,6 +327,7 @@ ensure_deps() {
   command -v less  >/dev/null 2>&1    || pkgs+=(less)
   command -v xz    >/dev/null 2>&1    || pkgs+=(xz xz-utils)
   command -v gzip  >/dev/null 2>&1    || pkgs+=(gzip)
+  command -v bzip2 >/dev/null 2>&1    || pkgs+=(bzip2)
 
   if [[ ${#pkgs[@]} -gt 0 ]]; then
     prepare_dependency_installation "${pkgs[@]}" || return 1
@@ -364,7 +366,7 @@ select_image_source() {
   local choice
   choice=$(dialog --stdout --title "$(title)" --menu "Select image source" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
     download "Choose from curated distros" \
-    local    "Choose local ISO files" \
+    local    "Choose local ISO or raw image files" \
     back     "Back") || return 1
 
   case "$choice" in
@@ -404,17 +406,23 @@ select_images_from_config_multi() {
     fi
     items+=("$id" "$label" off)
   done
-  local chosen
-  chosen=$(dialog --stdout --title "Choose Distros (multi)" --checklist "Pick one or more to download" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}") || return 1
-  chosen=$(sed 's/\"//g' <<<"$chosen")
-  [[ -z "$chosen" ]] && return 1
+  local selection_file
+  selection_file=$(mktemp) || return 1
+  if ! dialog --stdout --separate-output --title "Choose Distros (multi)" --checklist "Pick one or more to download" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}" >"$selection_file"; then
+    rm -f "$selection_file"
+    return 1
+  fi
+  local -a chosen=()
+  mapfile -t chosen <"$selection_file"
+  rm -f "$selection_file"
+  [[ ${#chosen[@]} -gt 0 ]] || return 1
 
   pushd "$DOWNLOAD_DIR" >/dev/null
   SELECTED_IMAGES=()
   local -a skipped_insecure=()
   local -a skipped_unsupported=()
-  local id url browser_url output path errs=0 download_failed=0 browser_handoffs=0 browser_status
-  for id in $chosen; do
+  local id url browser_url output path normalized_path errs=0 download_failed=0 browser_handoffs=0 browser_status
+  for id in "${chosen[@]}"; do
     [[ "$id" == hdr_* ]] && continue
     browser_url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .browser_url // empty' "$CONFIG_FILE")
     if [[ -n "$browser_url" ]]; then
@@ -448,7 +456,14 @@ select_images_from_config_multi() {
       fi
     fi
     path="$DOWNLOAD_DIR/$output"
-    if [[ -f "$path" ]]; then SELECTED_IMAGES+=("$path"); fi
+    if [[ -f "$path" ]]; then
+      if normalized_path=$(normalize_ventoy_image "$path"); then
+        SELECTED_IMAGES+=("$normalized_path")
+      else
+        errs=$((errs+1))
+        skipped_unsupported+=("$id (unable to unpack compressed image)")
+      fi
+    fi
   done
   popd >/dev/null
   if (( errs > 0 )); then
@@ -484,9 +499,9 @@ select_images_local_multi() {
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
-  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f -iname "*.iso" 2>/dev/null | sort)
+  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f \( -iname "*.iso" -o -iname "*.img" \) -print 2>/dev/null | sort)
   if [[ ${#files[@]} -eq 0 ]]; then
-    dialog --title "No ISOs" --msgbox "No ISO files found in $DOWNLOAD_DIR. Run ./download to fetch images first." 9 70
+    dialog --title "No boot images" --msgbox "No ISO or raw image files found in $DOWNLOAD_DIR. Run ./download to fetch images first." 9 70
     return 1
   fi
   local items=()
@@ -495,11 +510,16 @@ select_images_local_multi() {
     base=$(basename "$p")
     items+=("$p" "$base" off)
   done
-  local selected
-  selected=$(dialog --stdout --title "Select ISOs (Ventoy)" --checklist "Choose one or more images to copy via Ventoy" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}") || return 1
-  selected=$(sed 's/\"//g' <<<"$selected")
+  local selection_file
+  selection_file=$(mktemp) || return 1
+  if ! dialog --stdout --separate-output --title "Select ISOs (Ventoy)" --checklist "Choose one or more images to copy via Ventoy" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}" >"$selection_file"; then
+    rm -f "$selection_file"
+    return 1
+  fi
   SELECTED_IMAGES=()
-  for p in $selected; do SELECTED_IMAGES+=("$p"); done
+  mapfile -t SELECTED_IMAGES <"$selection_file"
+  rm -f "$selection_file"
+  [[ ${#SELECTED_IMAGES[@]} -gt 0 ]] || return 1
   if [[ ${#SELECTED_IMAGES[@]} -eq 1 ]]; then
     SELECTED_IMAGE="${SELECTED_IMAGES[0]}"
   elif [[ ${#SELECTED_IMAGES[@]} -gt 1 ]]; then
@@ -921,14 +941,44 @@ ensure_space_or_prune() {
   if (( total <= avail )); then return 0; fi
   local items=()
   for f in "${SELECTED_IMAGES[@]}"; do items+=("$f" "$(basename "$f")" on); done
-  local sel; sel=$(dialog --stdout --title "Insufficient space" --checklist "Available: $((avail/1024/1024)) MiB\nRequired: $((total/1024/1024)) MiB\nDeselect some ISOs:" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}") || return 1
-  sel=$(sed 's/\"//g' <<<"$sel")
-  local new=(); for f in $sel; do new+=("$f"); done
+  local selection_file
+  selection_file=$(mktemp) || return 1
+  if ! dialog --stdout --separate-output --title "Insufficient space" --checklist "Available: $((avail/1024/1024)) MiB\nRequired: $((total/1024/1024)) MiB\nDeselect some ISOs:" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}" >"$selection_file"; then
+    rm -f "$selection_file"
+    return 1
+  fi
+  local -a new=()
+  mapfile -t new <"$selection_file"
+  rm -f "$selection_file"
   [[ ${#new[@]} -eq 0 ]] && return 1
   SELECTED_IMAGES=("${new[@]}")
   # recheck
   total=0; for f in "${SELECTED_IMAGES[@]}"; do size=$(stat -c %s "$f" 2>/dev/null || echo 0); total=$((total + size)); done
   (( total <= avail )) || ensure_space_or_prune "$mnt"
+}
+
+# Ventoy receives an actual ISO or raw image, never a compressed catalog
+# archive. Keep the downloaded archive intact, then reuse an existing unpacked
+# sibling or create it atomically beside the source file.
+normalize_ventoy_image() {
+  local source="$1" output tool tmp
+  case "$source" in
+    *.xz)  output="${source%.xz}"; tool=xz ;;
+    *.gz)  output="${source%.gz}"; tool=gzip ;;
+    *.bz2) output="${source%.bz2}"; tool=bzip2 ;;
+    *) printf '%s\n' "$source"; return 0 ;;
+  esac
+  command -v "$tool" >/dev/null 2>&1 || return 1
+  if [[ ! -f "$output" ]]; then
+    tmp=$(mktemp "${output}.partial.XXXXXX") || return 1
+    if ! "$tool" -dc -- "$source" >"$tmp"; then
+      rm -f "$tmp"
+      return 1
+    fi
+    mv -f "$tmp" "$output"
+  fi
+  [[ -s "$output" ]] || return 1
+  printf '%s\n' "$output"
 }
 
 copy_isos_to_ventoy() {
@@ -997,12 +1047,12 @@ select_background_image() {
   dialog_init
   local start_dir="${DOWNLOAD_DIR:-$HOME}"
   local bundled_dir="$REPO_ROOT/assets/ventoy"
-  local choice img lower retry
+  local choice img lower
 
   while true; do
     choice=$(dialog --stdout --title "Select Ventoy Background" --menu \
-      "Choose a bundled background or a custom image" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
-      isoforge "IsoForge — dark forge" \
+      "IsoForge is the default. Choose another background to replace it." "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
+      isoforge "IsoForge — dark forge (default)" \
       nikos "NikOS — dark slate" \
       custom "Choose a jpg/png/tga file") || return 1
     case "$choice" in
@@ -1147,9 +1197,9 @@ create_iso() {
   clear
   local rc
   if (( EUID == 0 )); then
-    if "$REPO_ROOT/inc/forge.sh" --recipe "$recipe" --base-iso "$base_iso"; then rc=0; else rc=$?; fi
+    if "$REPO_ROOT/inc/forge.sh" --recipe "$recipe" --base-iso "$base_iso" --config "$CONFIG_FILE" --output "$DOWNLOAD_DIR"; then rc=0; else rc=$?; fi
   else
-    if sudo "$REPO_ROOT/inc/forge.sh" --recipe "$recipe" --base-iso "$base_iso"; then rc=0; else rc=$?; fi
+    if sudo "$REPO_ROOT/inc/forge.sh" --recipe "$recipe" --base-iso "$base_iso" --config "$CONFIG_FILE" --output "$DOWNLOAD_DIR"; then rc=0; else rc=$?; fi
   fi
 
   if (( rc == 0 )); then

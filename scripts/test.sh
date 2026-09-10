@@ -50,6 +50,7 @@ cd "$ROOT_DIR"
 ./scripts/test-setup-dependencies.sh
 ./scripts/test-flash-drive-redirect.sh
 ./scripts/test-ventoy-install-dialog.sh
+./scripts/test-ventoy-selection.sh
 ./scripts/test-iso-creator.sh
 ./scripts/test-download-error-state.sh
 ./scripts/test-browser-catalog-entry.sh

@@ -122,11 +122,10 @@ open_browser_url() {
   for opener in xdg-open gio open; do
     command -v "$opener" >/dev/null 2>&1 || continue
     if [[ "$opener" == gio ]]; then
-      gio open "$url" >/dev/null 2>&1 &
+      gio open "$url" >/dev/null 2>&1 && return 0
     else
-      "$opener" "$url" >/dev/null 2>&1 &
+      "$opener" "$url" >/dev/null 2>&1 && return 0
     fi
-    return 0
   done
   return 1
 }

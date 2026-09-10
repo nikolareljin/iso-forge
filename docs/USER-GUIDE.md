@@ -32,7 +32,7 @@ The standard image directory is `~/Downloads/iso_images`. Set `download_dir` in 
 1. In the main menu, select **Select Images**.
 2. Choose **Choose from curated distros**.
 3. Select one or more entries. The catalog includes desktop Linux, Ubuntu Server for AMD64 and ARM64, recovery tools, NAS, firewall and virtualization images.
-4. IsoForge downloads direct catalog entries to `download_dir`. Its progress display shows downloaded MiB, total MiB, and a percentage calculated from the underlying byte counts.
+4. IsoForge downloads direct catalog entries to `download_dir`. Its progress display shows downloaded MiB, total MiB, and a percentage calculated from the underlying byte counts. Compressed catalog images such as `.img.xz`, `.img.gz`, and `.iso.bz2` are unpacked to a bootable ISO or raw image before Ventoy uses them; the original archive is retained.
 5. Entries labelled as requiring an account are handled differently: IsoForge asks to open the vendor’s HTTPS page in the browser. Complete the download there, then return to **Select Images** and choose **Choose local ISO files**.
 
 A download error remains visible in the main status area after its error dialog closes, including the source and log location.
@@ -55,9 +55,9 @@ Use ISO Creator when the desired installer must contain a customized Ubuntu or X
 ### In the interface
 
 1. Choose **ISO Creator** from the main menu.
-2. Select a recipe. `recipes/example.yml` demonstrates packages, sources, overlays, and hooks. `recipes/nikos.yml` creates the post-install NikOS Xubuntu image.
-3. Select the base ISO when prompted, or let the recipe resolve a catalog base.
-4. Confirm the destination and start the build. IsoForge reports the resulting ISO filename and directory when it finishes.
+2. Select a supported base ISO already stored in `download_dir`. Download it first through **Select Images**, or place it there yourself.
+3. Select a recipe. `recipes/example.yml` demonstrates packages, sources, overlays, and hooks. `recipes/nikos.yml` creates the post-install NikOS Xubuntu image.
+4. Confirm the destination and start the build. IsoForge passes the selected config and `download_dir` to the builder, then reports the resulting ISO filename and directory when it finishes.
 5. Return to **Select Images**, choose the resulting ISO, and continue with USB preparation.
 
 ### From the command line
@@ -99,8 +99,8 @@ This keeps hardware-specific and user-specific choices on the installed machine,
 1. In the main menu, select **Prepare USB** after selecting one or more ISO files.
 2. Review the target device. IsoForge lists removable USB drives by default. Do not select an internal disk.
 3. Confirm the destructive warning. IsoForge asks for administrator authentication before accessing the device.
-4. Select a background if desired:
-   - **IsoForge** uses the bundled dark background.
+4. IsoForge uses the bundled dark **IsoForge** background by default. Select **Ventoy Background** before preparation to replace it:
+   - **IsoForge** restores the bundled default background.
    - **NikOS** uses the bundled NikOS background.
    - **Custom** accepts PNG, JPG/JPEG, or TGA.
 5. The image preview opens in `image-view` gallery mode. Use Left/Right to inspect nearby images and press `q` when satisfied. IsoForge then asks whether to use that image or preview another.

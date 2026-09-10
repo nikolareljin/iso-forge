@@ -39,7 +39,7 @@ esac
 
 # Burning is Ventoy-only. Keep this compatibility entrypoint, but hand off to
 # the main workflow instead of writing a raw image with dd.
-exec "$REPO_ROOT/inc/isoforge.sh"
+exec env CONFIG_FILE="$CONFIG_FILE" "$REPO_ROOT/inc/isoforge.sh" "$@"
 
 if [[ ! -f "$SCRIPT_HELPERS_DIR/helpers.sh" ]]; then
   >&2 printf "Missing required helper library: %s\n" "$SCRIPT_HELPERS_DIR/helpers.sh"

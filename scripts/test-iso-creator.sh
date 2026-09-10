@@ -15,4 +15,5 @@ output="$("$ROOT_DIR"/forge --recipe "$ROOT_DIR/recipes/example.yml" --base-iso 
 creator="$ROOT_DIR/inc/isoforge.sh"
 grep -A9 '^main_menu()' "$creator" | grep -qx '  load_config'
 grep -q 'iso_creator_output_path' "$creator"
+grep -Fq -- '--base-iso "$base_iso" --config "$CONFIG_FILE" --output "$DOWNLOAD_DIR"' "$creator"
 grep -Fq "New ISO created:\\n\$created_iso" "$creator"

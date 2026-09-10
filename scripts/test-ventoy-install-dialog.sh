@@ -92,7 +92,8 @@ EOF
 [[ -f "$ROOT_DIR/assets/ventoy/nikos-background.svg" ]]
 [[ -f "$ROOT_DIR/assets/ventoy/isoforge-background.png" ]]
 [[ -f "$ROOT_DIR/assets/ventoy/nikos-background.png" ]]
-grep -q 'isoforge "IsoForge — dark forge"' "$ROOT_DIR/inc/isoforge.sh"
+grep -q 'SELECTED_BACKGROUND="$REPO_ROOT/assets/ventoy/isoforge-background.png"' "$ROOT_DIR/inc/isoforge.sh"
+grep -q 'isoforge "IsoForge — dark forge (default)"' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'nikos "NikOS — dark slate"' "$ROOT_DIR/inc/isoforge.sh"
 
 grep -q 'reports no usable capacity' "$ROOT_DIR/inc/isoforge.sh"

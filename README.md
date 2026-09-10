@@ -9,7 +9,7 @@ IsoForge is a terminal application for collecting Linux installer images, creati
 - Create a new installable ISO from a supported Ubuntu or Xubuntu base and a recipe.
 - Create the NikOS post-install Xubuntu image: the stock Xubuntu installation runs first, then its **Install NikOS** launcher presents NikOS choices on the installed machine.
 - Prepare a Ventoy USB drive and copy one or more ISOs to it. Ventoy is the standard USB path even for a single ISO.
-- Apply an IsoForge, NikOS, or custom Ventoy background and review it before accepting it.
+- Use the IsoForge Ventoy background by default, or replace it with the NikOS or a custom background and review it before accepting it.
 
 ## Start here
 
