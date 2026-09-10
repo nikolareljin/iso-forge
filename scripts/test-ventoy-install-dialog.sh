@@ -88,3 +88,7 @@ grep -q 'nikos "NikOS — dark slate"' "$ROOT_DIR/inc/isoforge.sh"
 
 grep -q 'reports no usable capacity' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'before any validation or Ventoy command' "$ROOT_DIR/inc/isoforge.sh"
+
+grep -q '"$viewer" -g "$img"' "$ROOT_DIR/inc/isoforge.sh"
+grep -q 'Use this Ventoy background?' "$ROOT_DIR/inc/isoforge.sh"
+grep -q 'Would you like to preview another background?' "$ROOT_DIR/inc/isoforge.sh"

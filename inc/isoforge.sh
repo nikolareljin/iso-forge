@@ -842,65 +842,92 @@ copy_isos_to_ventoy() {
   done
 }
 
-select_background_image() {
-  dialog_init
-  local start_dir="${DOWNLOAD_DIR:-$HOME}"
-  local bundled_dir="$REPO_ROOT/assets/ventoy"
-  local choice img
-  choice=$(dialog --stdout --title "Select Ventoy Background" --menu \
-    "Choose a bundled background or a custom image" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
-    isoforge "IsoForge — dark forge" \
-    nikos "NikOS — dark slate" \
-    custom "Choose a jpg/png/tga file") || return 1
-  case "$choice" in
-    isoforge) img="$bundled_dir/isoforge-background.png" ;;
-    nikos)    img="$bundled_dir/nikos-background.png" ;;
-    custom)
-      img=$(dialog --stdout --title "Select Background Image (jpg/png/tga)" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
-      ;;
-    *) return 1 ;;
-  esac
-  if [[ ! -f "$img" ]]; then
-    dialog --title "Background unavailable" --msgbox "Background file not found:
-$img" 8 72
-    return 1
-  fi
-  local lower="${img,,}"
-  if [[ "$lower" != *.jpg && "$lower" != *.jpeg && "$lower" != *.png && "$lower" != *.tga ]]; then
-    dialog --title "Invalid file" --msgbox "Select a jpg/png/tga image." 7 40
-    return 1
-  fi
-  SELECTED_BACKGROUND="$img"
-  ensure_image_view_available
-  local viewer=""
-  for viewer in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
-    [[ -x "$viewer" ]] && break || viewer=""
+preview_background_image() {
+  local img="$1" viewer=""
+  for viewer in "$(command -v image-view 2>/dev/null || true)" \
+    "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
+    [[ -n "$viewer" && -x "$viewer" ]] && break
+    viewer=""
   done
-  if [[ -n "$viewer" ]]; then
-    # Launch external viewer; user closes it normally (e.g., window close or ESC if supported)
-    "$viewer" "$SELECTED_BACKGROUND" || true
+
+  if [[ -z "$viewer" ]]; then
+    ensure_image_view_available
+    for viewer in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
+      [[ -x "$viewer" ]] && break || viewer=""
+    done
+  fi
+
+  if [[ -n "$viewer" ]] && { : </dev/tty; } 2>/dev/null; then
+    dialog --title "Background preview" --msgbox \
+      "The preview will open in the terminal now.\n\nUse Left/Right to browse nearby images and q when you are ready to return here." 10 72
+    clear
+    # Gallery mode deliberately stays open until q; the single-image command
+    # renders once then exits, allowing dialog to erase the preview immediately.
+    "$viewer" -g "$img" </dev/tty >/dev/tty 2>/dev/tty || return 1
     return 0
   fi
 
   if command -v chafa >/dev/null 2>&1; then
-    # Render preview in the terminal and keep it open in less until user presses 'q' to quit.
-    # This provides a simple "press q to close" interaction.
-    local err_file; err_file="$(mktemp)"
+    local err_file chafa_rc emsg
+    err_file="$(mktemp)"
     set +e
-    chafa "$SELECTED_BACKGROUND" 2>"$err_file" | less -R
-    local chafa_rc=${PIPESTATUS[0]}
+    chafa "$img" 2>"$err_file" | less -R
+    chafa_rc=${PIPESTATUS[0]}
     set -e
     if [[ $chafa_rc -ne 0 ]]; then
-      local emsg; emsg=$(cat "$err_file")
+      emsg=$(cat "$err_file")
       rm -f "$err_file"
-      dialog --title "chafa error" --msgbox "Failed to preview image with 'chafa'.\n\nError:\n${emsg}" 12 70
+      dialog --title "chafa error" --msgbox "Failed to preview image with chafa.\n\nError:\n${emsg}" 12 70
       return 1
     fi
     rm -f "$err_file"
     return 0
   fi
 
-  print_warning "No preview tool available (image-view/chafa). Skipping preview."
+  dialog --title "Preview unavailable" --msgbox \
+    "image-view and chafa are unavailable, so this image cannot be previewed here." 8 72
+  return 1
+}
+
+select_background_image() {
+  dialog_init
+  local start_dir="${DOWNLOAD_DIR:-$HOME}"
+  local bundled_dir="$REPO_ROOT/assets/ventoy"
+  local choice img lower retry
+
+  while true; do
+    choice=$(dialog --stdout --title "Select Ventoy Background" --menu \
+      "Choose a bundled background or a custom image" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
+      isoforge "IsoForge — dark forge" \
+      nikos "NikOS — dark slate" \
+      custom "Choose a jpg/png/tga file") || return 1
+    case "$choice" in
+      isoforge) img="$bundled_dir/isoforge-background.png" ;;
+      nikos)    img="$bundled_dir/nikos-background.png" ;;
+      custom)
+        img=$(dialog --stdout --title "Select Background Image (jpg/png/tga)" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
+        ;;
+      *) return 1 ;;
+    esac
+    if [[ ! -f "$img" ]]; then
+      dialog --title "Background unavailable" --msgbox "Background file not found:\n$img" 8 72
+      continue
+    fi
+    lower="${img,,}"
+    if [[ "$lower" != *.jpg && "$lower" != *.jpeg && "$lower" != *.png && "$lower" != *.tga ]]; then
+      dialog --title "Invalid file" --msgbox "Select a jpg/png/tga image." 7 40
+      continue
+    fi
+
+    preview_background_image "$img" || return 1
+    if dialog --title "Use this background?" --yesno \
+      "Use this Ventoy background?\n\n$(basename -- "$img")" 8 72; then
+      SELECTED_BACKGROUND="$img"
+      return 0
+    fi
+    dialog --title "Choose another?" --yesno \
+      "Would you like to preview another background?" 7 60 || return 1
+  done
 }
 
 # Ensure an image-view binary is available; try to download a release asset for current OS/arch
