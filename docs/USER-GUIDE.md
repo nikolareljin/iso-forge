@@ -106,7 +106,7 @@ This keeps hardware-specific and user-specific choices on the installed machine,
 5. The image preview opens in `image-view` gallery mode. Use Left/Right to inspect nearby images and press `q` when satisfied. IsoForge then asks whether to use that image or preview another.
 6. IsoForge starts Ventoy’s installer in the terminal. Read its prompt and answer its confirmation there; this preserves Ventoy’s own interactive safety check. IsoForge uses Ventoy’s default MBR-compatible layout rather than forcing GPT, which improves compatibility with older firmware.
 7. After Ventoy completes, IsoForge waits for both Ventoy partitions and verifies the standard EFI fallback bootloader before it copies any ISO files. A failed verification stops the workflow and asks you to reinstall Ventoy rather than reporting a bootable USB that is incomplete.
-8. IsoForge checks available space and copies the selected ISO files onto the Ventoy data partition, then unmounts any temporary mount it created.
+8. IsoForge gives Ventoy a wide, tall menu area between the header and footer, then checks available space and copies the selected ISO files onto the Ventoy data partition. It unmounts any temporary mount it created.
 9. Safely eject the USB drive. Boot it on the target computer and select an ISO from Ventoy’s menu.
 
 Once Ventoy is installed, future use normally only requires copying more ISO files; reinstall Ventoy only when changing the drive layout or repairing the installation.
