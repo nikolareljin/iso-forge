@@ -693,6 +693,67 @@ flash_image() {
 }
 
 # --- Ventoy support ---
+find_ventoy_partitions() {
+  local dev="$1"
+  lsblk -ln -b -o NAME,TYPE,SIZE,LABEL,FSTYPE "$dev" | awk '
+    $2 == "part" {
+      name=$1; size=$3; label=$4; fstype=$5;
+      if (label == "VTOYEFI" && fstype == "vfat") efi=name;
+      if (label != "VTOYEFI" && fstype != "vfat" && size > data_size) {
+        data=name; data_size=size;
+      }
+    }
+    END { if (data != "" && efi != "") print data, efi }
+  '
+}
+
+wait_for_ventoy_partitions() {
+  local dev="$1" attempt parts
+  for ((attempt=0; attempt<10; attempt++)); do
+    parts=$(find_ventoy_partitions "$dev")
+    [[ -n "$parts" ]] && { printf '%s\n' "$parts"; return 0; }
+    sleep 1
+  done
+  return 1
+}
+
+verify_ventoy_efi_bootloader() {
+  local efi_part="$1"
+  shift
+  local -a prefix=("$@")
+  local efi_mount mounted_here=0 verified=1
+
+  efi_mount=$(lsblk -no MOUNTPOINT "/dev/$efi_part" | head -1)
+  if [[ -z "$efi_mount" ]]; then
+    efi_mount=$(mktemp -d "${TMPDIR:-/tmp}/isoforge-ventoy-efi.XXXXXX") || return 1
+    if ! "${prefix[@]}" mount -o ro "/dev/$efi_part" "$efi_mount"; then
+      rmdir "$efi_mount" 2>/dev/null || true
+      return 1
+    fi
+    mounted_here=1
+  fi
+
+  if [[ ! -f "$efi_mount/EFI/BOOT/BOOTX64.EFI" && \
+        ! -f "$efi_mount/EFI/BOOT/BOOTIA32.EFI" && \
+        ! -f "$efi_mount/EFI/BOOT/BOOTAA64.EFI" ]]; then
+    verified=0
+  fi
+
+  if (( mounted_here )); then
+    "${prefix[@]}" umount "$efi_mount" || verified=0
+    rmdir "$efi_mount" 2>/dev/null || true
+  fi
+  return $((1 - verified))
+}
+
+cleanup_ventoy_data_mount() {
+  local mnt="$1"
+  shift
+  local -a prefix=("$@")
+  "${prefix[@]}" umount "$mnt" || return 1
+  rmdir "$mnt" 2>/dev/null || true
+}
+
 flash_with_ventoy() {
   if [[ ${#SELECTED_IMAGES[@]} -eq 0 ]]; then return 1; fi
   ensure_ventoy_available || return 1
@@ -712,7 +773,8 @@ flash_with_ventoy() {
 
   # Ventoy owns a safety confirmation of its own. Run it in the terminal so
   # its output and y/n prompt remain native and readable, rather than hiding
-  # them behind a dialog control or answering on the user's behalf.
+  # them behind a dialog control or answering on the user's behalf. Do not
+  # force GPT: Ventoy's default MBR layout has wider legacy-firmware support.
   dialog --title "Ventoy confirmation" --msgbox \
     "Ventoy will now continue in the terminal and ask for its own confirmation.\n\nReview its device name carefully, answer there, then return here when it exits." 10 72
   clear
@@ -720,7 +782,7 @@ flash_with_ventoy() {
   local errexit_was_on=0
   [[ $- == *e* ]] && errexit_was_on=1
   set +e
-  "${prefix[@]}" bash "$VENTOY_BIN" -I -g "$dev"
+  "${prefix[@]}" bash "$VENTOY_BIN" -I "$dev"
   local vstatus=$?
   (( errexit_was_on )) && set -e
   if { : </dev/tty; } 2>/dev/null; then
@@ -731,40 +793,40 @@ flash_with_ventoy() {
     dialog --title "Ventoy" --msgbox "Ventoy installation failed (exit $vstatus). Review the installer output above." 8 72
     return 1
   fi
-  local part mnt
-  part=$(
-    lsblk -ln -b -o NAME,TYPE,SIZE,LABEL,FSTYPE "/dev/$SELECTED_DEVICE" | awk '
-      $2=="part" {
-        name=$1; size=$3; label=$4; fstype=$5;
-        if (label != "VTOYEFI" && fstype != "vfat" && size > best_size) {
-          best_size=size; best=name;
-        }
-        if (size > max_size) {
-          max_size=size; max=name;
-        }
-      }
-      END { if (best != "") print best; else print max }
-    '
-  )
-  if [[ -z "$part" ]]; then
-    dialog --title "Ventoy" --msgbox "Could not locate Ventoy data partition." 7 60
+
+  local part efi_part mnt mounted_here=0 result=0
+  read -r part efi_part < <(wait_for_ventoy_partitions "$dev")
+  if [[ -z "$part" || -z "$efi_part" ]]; then
+    dialog --title "Ventoy" --msgbox "Ventoy exited successfully, but its data and EFI partitions did not appear. No ISO files were copied." 8 72
     return 1
   fi
+  if ! verify_ventoy_efi_bootloader "$efi_part" "${prefix[@]}"; then
+    dialog --title "Ventoy" --msgbox "Ventoy's EFI fallback bootloader was not found. No ISO files were copied because the USB may not boot. Reinstall Ventoy and review its terminal output." 10 76
+    return 1
+  fi
+
   mnt=$(lsblk -no MOUNTPOINT "/dev/$part" | head -1)
   if [[ -z "$mnt" ]]; then
-    mnt="$REPO_ROOT/.mnt_ventoy"; mkdir -p "$mnt"
+    mnt=$(mktemp -d "${TMPDIR:-/tmp}/isoforge-ventoy-data.XXXXXX") || return 1
     if ! "${prefix[@]}" mount "/dev/$part" "$mnt"; then
-      dialog --title "Ventoy" --msgbox "Failed to mount /dev/$part. Ensure exFAT support is installed (exfatprogs/exfat-utils)." 9 70
+      rmdir "$mnt" 2>/dev/null || true
+      dialog --title "Ventoy" --msgbox "Failed to mount /dev/$part. Ensure exFAT support is installed (exfatprogs)." 9 70
       return 1
     fi
+    mounted_here=1
   fi
+
   if [[ -n "$SELECTED_BACKGROUND" && -f "$SELECTED_BACKGROUND" ]]; then
-    apply_ventoy_background "$mnt" "$SELECTED_BACKGROUND" "${prefix[@]}" || return 1
+    apply_ventoy_background "$mnt" "$SELECTED_BACKGROUND" "${prefix[@]}" || result=1
   fi
-  if ! ensure_space_or_prune "$mnt"; then return 1; fi
-  copy_isos_to_ventoy "$mnt" "${prefix[@]}" || return 1
+  if (( result == 0 )) && ! ensure_space_or_prune "$mnt"; then result=1; fi
+  if (( result == 0 )) && ! copy_isos_to_ventoy "$mnt" "${prefix[@]}"; then result=1; fi
   sync || true
-  dialog --title "Success" --msgbox "Ventoy prepared and ISOs copied successfully." 7 60
+  if (( mounted_here )); then
+    cleanup_ventoy_data_mount "$mnt" "${prefix[@]}" || result=1
+  fi
+  (( result == 0 )) || return 1
+  dialog --title "Success" --msgbox "Ventoy prepared, bootloader verified, and ISOs copied successfully." 7 72
 }
 
 ensure_ventoy_available() {

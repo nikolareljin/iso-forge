@@ -13,8 +13,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   trap 'rm -rf "$tmpdir"' EXIT
   installer="$tmpdir/Ventoy2Disk.sh"
   answer="$tmpdir/answer"
+  installer_args="$tmpdir/installer-args"
   cat >"$installer" <<EOF
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >"$installer_args"
 if read -r reply; then
   printf '%s' "\$reply" >"$answer"
 else
@@ -48,12 +50,18 @@ EOF
     if [[ "$*" == *'-dn'* && "$*" == *SIZE* ]]; then
       printf '1000000\n'
     elif [[ "$*" == *'-ln'* ]]; then
-      printf 'sdb1 part 1000000 VENTOY exfat\n'
+      printf 'sdb1 part 1000000 Ventoy exfat\nsdb2 part 32000000 VTOYEFI vfat\n'
     fi
   }
   dd() { return 0; }
   # shellcheck disable=SC2317 # invoked indirectly by flash_with_ventoy
-  mount() { return 0; }
+  mount() {
+    local target="${!#}"
+    mkdir -p "$target/EFI/BOOT"
+    : >"$target/EFI/BOOT/BOOTX64.EFI"
+  }
+  umount() { return 0; }
+  sleep() { :; }
 
   SELECTED_DEVICE=sdb
   SELECTED_IMAGES=("$tmpdir/test.iso")
@@ -63,6 +71,7 @@ EOF
   [[ -f "$terminal_notice_seen" ]]
   [[ ! -e "$programbox_seen" ]]
   [[ ! -e "$gauge_seen" ]]
+  [[ "$(cat "$installer_args")" == "-I /dev/sdb" ]]
 
   # Writes to the root-mounted data partition must use the supplied sudo path.
   write_mnt="$tmpdir/write-mnt"
@@ -88,6 +97,10 @@ grep -q 'nikos "NikOS — dark slate"' "$ROOT_DIR/inc/isoforge.sh"
 
 grep -q 'reports no usable capacity' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'before any validation or Ventoy command' "$ROOT_DIR/inc/isoforge.sh"
+grep -q '"$VENTOY_BIN" -I "$dev"' "$ROOT_DIR/inc/isoforge.sh"
+! grep -q '"$VENTOY_BIN" -I -g "$dev"' "$ROOT_DIR/inc/isoforge.sh"
+grep -q 'verify_ventoy_efi_bootloader' "$ROOT_DIR/inc/isoforge.sh"
+grep -q 'cleanup_ventoy_data_mount' "$ROOT_DIR/inc/isoforge.sh"
 
 grep -q '"$viewer" -g "$img"' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'Use this Ventoy background?' "$ROOT_DIR/inc/isoforge.sh"

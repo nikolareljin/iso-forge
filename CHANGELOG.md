@@ -20,7 +20,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Fixed
 - Setup uses `exfatprogs` instead of the obsolete `exfat-utils` package on current Debian and Ubuntu releases.
 - Dependency installation and download failures remain visible with actionable status rather than appearing stalled.
-- Ventoy preparation requests elevated privileges before device access and keeps its native confirmation prompt in the terminal.
+- Ventoy preparation requests elevated privileges before device access, keeps its native confirmation prompt in the terminal, uses its default MBR-compatible layout, verifies the EFI fallback bootloader, and removes IsoForge-owned temporary mounts.
 - The generated man page now matches the Ventoy-first CLI description.
 
 ## 2026-09-03 — 2.1.3
