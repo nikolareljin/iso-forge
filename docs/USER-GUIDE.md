@@ -96,7 +96,7 @@ This keeps hardware-specific and user-specific choices on the installed machine,
 
 ## Prepare the Ventoy USB drive
 
-1. In the main menu, select **Prepare USB** after selecting one or more ISO files.
+1. In the main menu, select **Prepare Ventoy USB** after selecting one or more ISO files.
 2. Review the target device. IsoForge lists removable USB drives by default. Do not select an internal disk.
 3. Confirm the destructive warning. IsoForge asks for administrator authentication before accessing the device.
 4. IsoForge uses the bundled dark **IsoForge** background by default. Select **Ventoy Background** before preparation to replace it:

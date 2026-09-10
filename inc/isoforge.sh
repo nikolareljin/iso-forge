@@ -216,7 +216,7 @@ open_browser_catalog_source() {
     return 1
   fi
   dialog --title "Browser opened" --msgbox \
-    "Complete the vendor download in your browser. When it finishes, return here and choose Local ISO files." 9 76
+    "Complete the vendor download in your browser. When it finishes, return here, choose Select ISO files, then Browse any folder for an image." 11 76
 }
 
 load_config() {
@@ -837,7 +837,9 @@ cleanup_owned_ventoy_mount() {
 }
 
 cleanup_isoforge_exit() {
-  cleanup_owned_ventoy_mount
+  # Keep the owned path for a later retry if unmount fails, but never let
+  # best-effort cleanup prevent restoring the terminal after dialog exits.
+  cleanup_owned_ventoy_mount || true
   reset_tui
 }
 

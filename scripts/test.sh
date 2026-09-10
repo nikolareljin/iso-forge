@@ -59,6 +59,7 @@ cd "$ROOT_DIR"
 ./scripts/test-forge-distrodeck.sh
 ./scripts/test-forge-image.sh
 ./scripts/test-forge-nikos.sh
+./scripts/test-forge-ansible.sh
 
 if command -v jq >/dev/null 2>&1; then
     jq -e '.distros and (.distros | type == "array")' config.json >/dev/null

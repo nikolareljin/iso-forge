@@ -86,6 +86,10 @@ EOF
   cleanup_ventoy_data_mount() { return 1; }
   cleanup_owned_ventoy_mount || true
   [[ "$VENTOY_OWNED_DATA_MOUNT" == "$tmpdir/still-mounted" ]]
+  reset_seen="$tmpdir/reset-seen"
+  reset_tui() { : >"$reset_seen"; }
+  cleanup_isoforge_exit
+  [[ -f "$reset_seen" ]]
 
   # Writes to the root-mounted data partition must use the supplied sudo path.
   write_mnt="$tmpdir/write-mnt"
