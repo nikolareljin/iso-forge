@@ -20,7 +20,9 @@ SETUP_PACKAGES_FILE="$packages_file" SCRIPT_HELPERS_DIR="$helpers_dir" \
   bash "$ROOT_DIR/inc/setup.sh"
 
 packages="$(cat "$packages_file")"
+expected_xz=xz
+command -v apt-get >/dev/null 2>&1 && expected_xz=xz-utils
 [[ "$packages" == *"exfatprogs"* ]]
-[[ " $packages " == *" xz-utils "* ]]
+[[ " $packages " == *" $expected_xz "* ]]
 [[ " $packages " != *" xz xz-utils "* ]]
 [[ "$packages" != *"exfat-utils"* ]]

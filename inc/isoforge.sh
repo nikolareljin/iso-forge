@@ -375,13 +375,15 @@ select_image_source() {
   local choice
   choice=$(dialog --stdout --title "$(title)" --menu "Select image source" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
     download "Choose from curated distros" \
-    local    "Choose local ISO or raw image files" \
+    local    "Choose from IsoForge downloads" \
+    browse   "Browse any folder for an image" \
     back     "Back") || return 1
 
   case "$choice" in
     download) select_images_from_config_multi ;;
     local)    select_images_local_multi       ;;
-    back)            return 0                        ;;
+    browse)   select_image_local              ;;
+    back)     return 0                         ;;
   esac
 }
 
@@ -549,17 +551,32 @@ Install the required decompressor and try again." 10 72
   fi
 }
 
+# Browse outside DOWNLOAD_DIR, for example after a browser-authenticated
+# catalogue handoff. Ventoy accepts ISO/raw images; compressed files are
+# unpacked through the same normalization path as catalogue downloads.
 select_image_local() {
   dialog_init
-  local start_dir="${SELECTED_IMAGE:-$HOME}"
-  local iso
-  iso=$(dialog --stdout --title "$(title) — Select ISO" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
-  if [[ -z "$iso" ]]; then return 1; fi
-  if [[ "${iso,,}" != *.iso ]]; then
-    dialog --title "Invalid file" --msgbox "Selected file is not an .iso" 8 50
+  local start_dir="${DOWNLOAD_DIR:-$HOME}" selected lower normalized_path
+  if [[ -n "${SELECTED_IMAGE:-}" ]]; then
+    start_dir=$(dirname -- "$SELECTED_IMAGE")
+  fi
+  selected=$(dialog --stdout --title "$(title) — Browse for boot image" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
+  [[ -n "$selected" && -f "$selected" ]] || return 1
+  lower=${selected,,}
+  case "$lower" in
+    *.iso|*.img|*.iso.xz|*.img.xz|*.iso.gz|*.img.gz|*.iso.bz2|*.img.bz2) ;;
+    *)
+      dialog --title "Invalid file" --msgbox "Select an ISO, raw image, or supported compressed image." 8 64
+      return 1
+      ;;
+  esac
+  if ! normalized_path=$(normalize_ventoy_image "$selected"); then
+    dialog --title "Image preparation failed" --msgbox "Could not unpack the selected image:
+$selected" 8 72
     return 1
   fi
-  SELECTED_IMAGE="$iso"
+  SELECTED_IMAGES=("$normalized_path")
+  SELECTED_IMAGE="$normalized_path"
 }
 
 select_image_from_config() {
@@ -1033,17 +1050,24 @@ copy_isos_to_ventoy() {
   done
 }
 
+image_view_cache_dir() {
+  printf '%s\n' "${ISOFORGE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/isoforge}/image-view"
+}
+
 preview_background_image() {
-  local img="$1" viewer=""
+  local img="$1" viewer="" cache_dir
+  cache_dir=$(image_view_cache_dir)
   for viewer in "$(command -v image-view 2>/dev/null || true)" \
-    "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
+    "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view" \
+    "$cache_dir/image-view"; do
     [[ -n "$viewer" && -x "$viewer" ]] && break
     viewer=""
   done
 
   if [[ -z "$viewer" ]]; then
     ensure_image_view_available
-    for viewer in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
+    for viewer in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view" \
+      "$cache_dir/image-view"; do
       [[ -x "$viewer" ]] && break || viewer=""
     done
   fi
@@ -1123,11 +1147,12 @@ select_background_image() {
 
 # Ensure an image-view binary is available; try to download a release asset for current OS/arch
 ensure_image_view_available() {
-  local bin
-  for bin in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
+  local bin cache_dir
+  cache_dir=$(image_view_cache_dir)
+  for bin in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view" "$cache_dir/image-view"; do
     [[ -x "$bin" ]] && return 0
   done
-  mkdir -p "$REPO_ROOT/image-view"
+  mkdir -p "$cache_dir" || return 1
   # Detect OS/arch (linux only)
   local os="linux" arch
   arch=$(uname -m | tr '[:upper:]' '[:lower:]')
@@ -1151,17 +1176,17 @@ ensure_image_view_available() {
           local found
           found=$(find "$tmpdir/extract" -type f -perm -111 -iname 'image-view*' | head -1)
           if [[ -n "$found" ]]; then
-            cp "$found" "$REPO_ROOT/image-view/image-view" && chmod +x "$REPO_ROOT/image-view/image-view"
+            cp "$found" "$cache_dir/image-view" && chmod +x "$cache_dir/image-view"
           fi
         elif [[ "$name" =~ \.zip$ ]]; then
           command -v unzip >/dev/null 2>&1 && unzip -o "$dest" -d "$tmpdir/extract" || true
           local found
           found=$(find "$tmpdir/extract" -type f -perm -111 -iname 'image-view*' | head -1)
           if [[ -n "$found" ]]; then
-            cp "$found" "$REPO_ROOT/image-view/image-view" && chmod +x "$REPO_ROOT/image-view/image-view"
+            cp "$found" "$cache_dir/image-view" && chmod +x "$cache_dir/image-view"
           fi
         else
-          cp "$dest" "$REPO_ROOT/image-view/image-view" && chmod +x "$REPO_ROOT/image-view/image-view"
+          cp "$dest" "$cache_dir/image-view" && chmod +x "$cache_dir/image-view"
         fi
       fi
     fi
