@@ -744,12 +744,24 @@ flash_image() {
   dialog_init
   ensure_flash_drive_selected || return 1
   if [[ ${#SELECTED_IMAGES[@]} -gt 0 ]]; then
+    validate_selected_images || return 1
     flash_with_ventoy
     return $?
   fi
   dialog --title "Missing selection" --msgbox "Please select one or more ISO files first." 8 60
   return 1
 
+}
+
+validate_selected_images() {
+  local image
+  for image in "${SELECTED_IMAGES[@]}"; do
+    if [[ ! -f "$image" ]]; then
+      dialog --title "Image unavailable" --msgbox \
+        "This selected image is no longer available:\n\n${image}\n\nSelect images again before preparing the USB drive." 11 76
+      return 1
+    fi
+  done
 }
 
 # --- Ventoy support ---
@@ -817,11 +829,10 @@ cleanup_ventoy_data_mount() {
 cleanup_owned_ventoy_mount() {
   [[ -n "$VENTOY_OWNED_DATA_MOUNT" ]] || return 0
   local mnt="$VENTOY_OWNED_DATA_MOUNT"
-  VENTOY_OWNED_DATA_MOUNT=""
   if (( EUID == 0 )); then
-    cleanup_ventoy_data_mount "$mnt" || true
+    cleanup_ventoy_data_mount "$mnt" && VENTOY_OWNED_DATA_MOUNT=""
   else
-    cleanup_ventoy_data_mount "$mnt" sudo || true
+    cleanup_ventoy_data_mount "$mnt" sudo && VENTOY_OWNED_DATA_MOUNT=""
   fi
 }
 
@@ -832,6 +843,7 @@ cleanup_isoforge_exit() {
 
 flash_with_ventoy() {
   if [[ ${#SELECTED_IMAGES[@]} -eq 0 ]]; then return 1; fi
+  validate_selected_images || return 1
   local dev="/dev/$SELECTED_DEVICE"
   local prefix=(); command -v sudo >/dev/null 2>&1 && prefix=(sudo)
   flash_confirm || return 1
@@ -900,8 +912,11 @@ flash_with_ventoy() {
   if (( result == 0 )) && ! copy_isos_to_ventoy "$mnt" "${prefix[@]}"; then result=1; fi
   sync || true
   if (( mounted_here )); then
-    cleanup_ventoy_data_mount "$mnt" "${prefix[@]}" || result=1
-    VENTOY_OWNED_DATA_MOUNT=""
+    if cleanup_ventoy_data_mount "$mnt" "${prefix[@]}"; then
+      VENTOY_OWNED_DATA_MOUNT=""
+    else
+      result=1
+    fi
   fi
   (( result == 0 )) || return 1
   dialog --title "Success" --msgbox "Ventoy prepared, bootloader verified, and ISOs copied successfully." 7 72
@@ -930,6 +945,14 @@ ventoy_download_file() {
 ensure_ventoy_available() {
   VENTOY_BIN=""
   local cand root_cache api tag ver url tmpdir outdir
+  local -a elevate=()
+  if (( EUID != 0 )); then
+    if ! command -v sudo >/dev/null 2>&1; then
+      dialog --title "Ventoy" --msgbox "Administrator privileges are required to install Ventoy." 7 64
+      return 1
+    fi
+    elevate=(sudo)
+  fi
   root_cache=$(ventoy_system_cache_dir)
   # Never execute a Ventoy installer from a user-writable cache: this script
   # subsequently runs with administrator privileges.
@@ -942,13 +965,13 @@ ensure_ventoy_available() {
   if [[ -z "$VENTOY_BIN" ]]; then
     if command -v apt-get >/dev/null 2>&1; then
       print_info "Installing ventoy via apt-get ..."
-      sudo apt-get update && sudo apt-get install -y ventoy || true
+      "${elevate[@]}" apt-get update && "${elevate[@]}" apt-get install -y ventoy || true
     elif command -v dnf >/dev/null 2>&1; then
       print_info "Installing ventoy via dnf ..."
-      sudo dnf install -y ventoy || true
+      "${elevate[@]}" dnf install -y ventoy || true
     elif command -v pacman >/dev/null 2>&1; then
       print_info "Installing ventoy via pacman ..."
-      sudo pacman -S --noconfirm ventoy || true
+      "${elevate[@]}" pacman -S --noconfirm ventoy || true
     fi
     command -v Ventoy2Disk.sh >/dev/null 2>&1 && VENTOY_BIN=$(command -v Ventoy2Disk.sh)
   fi
@@ -964,9 +987,9 @@ ensure_ventoy_available() {
         # The archive is extracted only into a root-owned cache after sudo
         # authentication, so a user-writable cache cannot be elevated later.
         if ventoy_download_file "$url" "$tmpdir/ventoy.tgz" && \
-           sudo install -d -o root -g root -m 755 "$root_cache" && \
-           sudo rm -rf "$root_cache/ventoy-$ver" && \
-           sudo tar -xzf "$tmpdir/ventoy.tgz" -C "$root_cache"; then
+           "${elevate[@]}" install -d -o root -g root -m 755 "$root_cache" && \
+           "${elevate[@]}" rm -rf "$root_cache/ventoy-$ver" && \
+           "${elevate[@]}" tar --no-same-owner --no-same-permissions -xzf "$tmpdir/ventoy.tgz" -C "$root_cache"; then
           outdir="$root_cache/ventoy-$ver"
           [[ -x "$outdir/Ventoy2Disk.sh" ]] && VENTOY_BIN="$outdir/Ventoy2Disk.sh"
         fi

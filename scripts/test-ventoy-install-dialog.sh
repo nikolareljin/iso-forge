@@ -75,6 +75,18 @@ EOF
   [[ ! -e "$gauge_seen" ]]
   [[ "$(cat "$installer_args")" == "-I /dev/sdb" ]]
 
+  # A stale selection must be rejected before the destructive Ventoy step.
+  SELECTED_IMAGES=("$tmpdir/no-longer-present.iso")
+  if validate_selected_images; then
+    exit 1
+  fi
+
+  # Retain an owned mount path after a failed cleanup so the exit trap retries it.
+  VENTOY_OWNED_DATA_MOUNT="$tmpdir/still-mounted"
+  cleanup_ventoy_data_mount() { return 1; }
+  cleanup_owned_ventoy_mount || true
+  [[ "$VENTOY_OWNED_DATA_MOUNT" == "$tmpdir/still-mounted" ]]
+
   # Writes to the root-mounted data partition must use the supplied sudo path.
   write_mnt="$tmpdir/write-mnt"
   write_img="$tmpdir/background.png"

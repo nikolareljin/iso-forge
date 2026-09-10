@@ -44,7 +44,7 @@ if [[ -x "$LAUNCHER" ]] && bash -n "$LAUNCHER"; then ok "the post-install launch
 if [[ -f "$PROFILE" ]]; then ok "the Xubuntu 24.04 NikOS profile ships"; else bad "the Xubuntu 24.04 NikOS profile ships"; fi
 if [[ -f "$DESKTOP" ]] && grep -qx 'Exec=nikos-installer' "$DESKTOP"; then ok "the desktop launcher starts nikos-installer"; else bad "the desktop launcher starts nikos-installer"; fi
 if grep -q 'boot=casper' "$LAUNCHER"; then ok "the launcher refuses the live session"; else bad "the launcher refuses the live session"; fi
-if grep -q 'NIKOS_REPO_REF="release/0.6.5"' "$PROFILE"; then ok "the profile pins the released NikOS branch"; else bad "the profile pins the released NikOS branch"; fi
+if grep -q 'NIKOS_REPO_REF="0.6.5"' "$PROFILE"; then ok "the profile pins the immutable NikOS release tag"; else bad "the profile pins the immutable NikOS release tag"; fi
 if grep -q 'raw.githubusercontent.com/${github_repo}/${NIKOS_REPO_REF}/install.sh' "$LAUNCHER"; then ok "the launcher fetches the installer source at the selected ref"; else bad "the launcher fetches the installer source at the selected ref"; fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
