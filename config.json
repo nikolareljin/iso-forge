@@ -8,14 +8,49 @@
       "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-desktop-amd64.iso"
     },
     {
-      "id": "Ubuntu_24_04_3_server_amd64",
-      "label": "Ubuntu 24.04.3 LTS Server — Intel/AMD 64-bit (amd64)",
-      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso"
+      "id": "Ubuntu_24_04_4_server_amd64",
+      "label": "Ubuntu 24.04.4 LTS Server — Intel/AMD 64-bit (amd64)",
+      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso"
     },
     {
-      "id": "Ubuntu_24_04_3_server_arm64",
-      "label": "Ubuntu 24.04.3 LTS Server — ARM64 (aarch64)",
-      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-arm64.iso"
+      "id": "Ubuntu_24_04_4_server_arm64",
+      "label": "Ubuntu 24.04.4 LTS Server — ARM64 (aarch64)",
+      "url": "https://cdimage.ubuntu.com/ubuntu/releases/24.04/release/ubuntu-24.04.4-live-server-arm64.iso"
+    },
+    {
+      "id": "Ubuntu_26_04_1_server_amd64",
+      "label": "Ubuntu 26.04.1 LTS Server — Intel/AMD 64-bit (amd64)",
+      "url": "https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-amd64.iso"
+    },
+    {
+      "id": "Ubuntu_26_04_1_server_arm64",
+      "label": "Ubuntu 26.04.1 LTS Server — ARM64 (aarch64)",
+      "url": "https://cdimage.ubuntu.com/ubuntu/releases/26.04/release/ubuntu-26.04.1-live-server-arm64.iso"
+    },
+    {
+      "id": "Proxmox_VE_9_2_1_amd64",
+      "label": "Proxmox VE 9.2-1 — Intel/AMD 64-bit (amd64)",
+      "url": "https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso"
+    },
+    {
+      "id": "Proxmox_VE_9_2_1_arm64",
+      "label": "Proxmox VE 9.2-1 — ARM64 (aarch64)",
+      "url": "https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1-arm64.iso"
+    },
+    {
+      "id": "OpenMediaVault_8_3_1_amd64",
+      "label": "OpenMediaVault 8.3.1 — Intel/AMD 64-bit (amd64)",
+      "url": "https://sourceforge.net/projects/openmediavault/files/iso/8.3.1/openmediavault_8.3.1-amd64.iso/download"
+    },
+    {
+      "id": "OPNsense_26_7_dvd_amd64",
+      "label": "OPNsense 26.7 DVD — Intel/AMD 64-bit (amd64, compressed ISO .bz2)",
+      "url": "https://pkg.opnsense.org/releases/mirror/OPNsense-26.7-dvd-amd64.iso.bz2"
+    },
+    {
+      "id": "TrueNAS_Community_25_10_7_amd64",
+      "label": "TrueNAS Community 25.10.7 — Intel/AMD 64-bit (amd64)",
+      "url": "https://download.sys.truenas.net/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso"
     },
     {
       "id": "LinuxMint_22_Cinnamon_amd64",
