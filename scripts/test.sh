@@ -46,15 +46,37 @@ cd "$ROOT_DIR"
 
 ./scripts/build.sh
 ./scripts/test-cancel-flow.sh
+./scripts/test-dependency-install.sh
+./scripts/test-setup-dependencies.sh
 ./scripts/test-flash-drive-redirect.sh
+./scripts/test-ventoy-install-dialog.sh
+./scripts/test-ventoy-selection.sh
+./scripts/test-iso-creator.sh
 ./scripts/test-download-error-state.sh
+./scripts/test-browser-catalog-entry.sh
+./scripts/test-download-progress.sh
 ./scripts/test-forge-recipe.sh
 ./scripts/test-forge-distrodeck.sh
 ./scripts/test-forge-image.sh
 ./scripts/test-forge-nikos.sh
+./scripts/test-forge-ansible.sh
 
 if command -v jq >/dev/null 2>&1; then
     jq -e '.distros and (.distros | type == "array")' config.json >/dev/null
+    for catalog_id in \
+        Ubuntu_24_04_4_server_amd64 \
+        Ubuntu_24_04_4_server_arm64 \
+        Ubuntu_26_04_1_server_amd64 \
+        Ubuntu_26_04_1_server_arm64 \
+        Proxmox_VE_9_2_1_amd64 \
+        Proxmox_VE_9_2_1_arm64 \
+        OpenMediaVault_8_3_1_amd64 \
+        OPNsense_26_7_dvd_amd64 \
+        TrueNAS_Community_25_10_7_amd64; do
+        jq -e --arg id "$catalog_id" \
+            '.distros[] | select(.id == $id and (.url | startswith("https://")))' \
+            config.json >/dev/null
+    done
 else
     echo "warning: jq not available; skipping config schema check" >&2
 fi

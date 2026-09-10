@@ -1,7 +1,7 @@
 name: NikOS ISO
 
-# The real thing: download a stock Xubuntu image, run recipes/nikos.yml against
-# it, and assert that what comes out is NikOS. Nothing here is mocked.
+# Download stock Xubuntu, add the NikOS post-install launcher, and inspect the
+# resulting ISO. NikOS itself must not be provisioned during this build.
 #
 # This cannot live in the ordinary PR gate. It downloads about 4.5 GB, needs
 # root for chroot and overlayfs, wants ~25 GB of scratch space and takes the
@@ -25,6 +25,7 @@ on:
       - 'inc/forge/**'
       - 'recipes/**'
       - 'scripts/verify-nikos-iso.sh'
+      - 'scripts/test-nikos-xubuntu-iso.sh'
       - '.github/workflows/nikos-iso.yml'
 
 permissions:
@@ -84,8 +85,8 @@ jobs:
           echo "iso=$iso" >>"$GITHUB_OUTPUT"
           ls -lh /mnt/out
 
-      # The work directory survives a failed build. Rather than guess at what a
-      # playbook did from its recap, look at what it actually left behind.
+      # The work directory survives a failed build, so retain launcher evidence
+      # rather than guessing from command output.
       - name: Collect evidence from a failed build
         if: failure()
         run: |
@@ -98,12 +99,9 @@ jobs:
           sudo ls -la /mnt/isoforge 2>&1 | head -12
           for base in "$up" "$root"; do
             [ -d "$base" ] || continue
-            echo "== $base/etc/skel =="
-            sudo ls -la "$base/etc/skel" 2>&1 | head -25
-            echo "== $base nvm tree =="
-            sudo find "$base/etc/skel/.nvm" -maxdepth 5 2>/dev/null | head -40
-            echo "== $base node/npm =="
-            sudo find "$base" \( -name npm -o -name node \) 2>/dev/null | head -20
+            echo "== $base NikOS launcher =="
+            sudo ls -la "$base/usr/local/bin/nikos-installer" 2>&1 || true
+            sudo cat "$base/usr/share/iso-forge/nikos-profiles/xubuntu-24.04.env" 2>&1 || true
           done
           echo "== install-sources.yaml as shipped =="
           sudo cat /mnt/isoforge/iso/casper/install-sources.yaml 2>&1 | head -40
@@ -112,7 +110,7 @@ jobs:
           echo "== disk =="
           df -h /mnt | tail -1
 
-      - name: Verify the image is NikOS
+      - name: Verify the NikOS post-install launcher
         env:
           ISO: ${{ steps.build.outputs.iso }}
         run: |
@@ -153,7 +151,7 @@ jobs:
         run: |
           iso="$ISO"
           [ -f "$iso" ] || exit 0
-          echo "### NikOS ISO" >>"$GITHUB_STEP_SUMMARY"
+          echo "### NikOS post-install ISO" >>"$GITHUB_STEP_SUMMARY"
           echo '```' >>"$GITHUB_STEP_SUMMARY"
           ls -lh "$iso" >>"$GITHUB_STEP_SUMMARY"
           cat "$iso.sha256" 2>/dev/null >>"$GITHUB_STEP_SUMMARY" || true

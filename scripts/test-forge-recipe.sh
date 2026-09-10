@@ -39,6 +39,18 @@ for r in "$REPO_ROOT"/recipes/*.yml; do
   fi
 done
 
+recipe_load "$REPO_ROOT/recipes/nikos.yml" >/dev/null
+if recipe_base_is_compatible 'xubuntu-24.04.4-desktop-amd64.iso'; then
+  ok "NikOS accepts its Xubuntu 24.04 base"
+else
+  bad "NikOS accepts its Xubuntu 24.04 base"
+fi
+if recipe_base_is_compatible 'ubuntu-26.04-desktop-amd64.iso'; then
+  bad "NikOS rejects an incompatible Ubuntu base"
+else
+  ok "NikOS rejects an incompatible Ubuntu base"
+fi
+
 # --- required fields --------------------------------------------------------
 write "$TMP/no-name.yml" <<'EOF'
 recipe: t
@@ -213,6 +225,90 @@ else
   bad "the Xubuntu 24.04 base resolves from config.json"
 fi
 check "an unknown catalog id resolves to nothing" "$(forge_catalog_url definitely-not-a-distro)" ""
+
+# --- dry-run agrees with the build about the base ---------------------------
+# The dry-run's whole job is to answer "will this build?". It used to answer
+# yes for a recipe whose configured base its own compatibility patterns
+# forbid, because it only checked the --base-iso override.
+forge_dry_run() { "$REPO_ROOT/inc/forge.sh" --recipe "$1" --dry-run >/dev/null 2>&1; }
+
+write "$TMP/dry-catalog-ok.yml" <<'EOF'
+recipe: dry-catalog-ok
+base:
+  catalog_id: Xubuntu_24_04_4_desktop_amd64
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+output:
+  name: dry-catalog-ok
+EOF
+if forge_dry_run "$TMP/dry-catalog-ok.yml"; then
+  ok "dry-run accepts a catalog base its patterns allow"
+else
+  bad "dry-run accepts a catalog base its patterns allow"
+fi
+
+write "$TMP/dry-catalog-bad.yml" <<'EOF'
+recipe: dry-catalog-bad
+base:
+  catalog_id: Xubuntu_24_04_4_desktop_amd64
+compatibility:
+  base_filename_patterns:
+    - '^kubuntu-25\.10-desktop-amd64\.iso$'
+output:
+  name: dry-catalog-bad
+EOF
+if forge_dry_run "$TMP/dry-catalog-bad.yml"; then
+  bad "dry-run rejects a catalog base its patterns forbid"
+else
+  ok "dry-run rejects a catalog base its patterns forbid"
+fi
+
+write "$TMP/dry-url-bad.yml" <<'EOF'
+recipe: dry-url-bad
+base:
+  url: https://example.invalid/isos/debian-13-netinst-amd64.iso
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+output:
+  name: dry-url-bad
+EOF
+if forge_dry_run "$TMP/dry-url-bad.yml"; then
+  bad "dry-run rejects a url base its patterns forbid"
+else
+  ok "dry-run rejects a url base its patterns forbid"
+fi
+
+write "$TMP/dry-no-patterns.yml" <<'EOF'
+recipe: dry-no-patterns
+base:
+  url: https://example.invalid/isos/anything.iso
+output:
+  name: dry-no-patterns
+EOF
+if forge_dry_run "$TMP/dry-no-patterns.yml"; then
+  ok "a recipe declaring no patterns is unaffected"
+else
+  bad "a recipe declaring no patterns is unaffected"
+fi
+
+# --- dry-run and the build agree about the same base ------------------------
+# forge_resolve_base caches a download as basename "${url%%\?*}", so the
+# compatibility check has to ignore a query string too, or a supported URL is
+# refused by the dry-run and accepted by the build.
+recipe_load "$REPO_ROOT/recipes/nikos.yml" >/dev/null
+if recipe_base_is_compatible 'https://example.invalid/xubuntu-24.04.4-desktop-amd64.iso?download=1'; then
+  ok "a query string does not hide the filename"
+else
+  bad "a query string does not hide the filename"
+fi
+
+# --- a browser-only catalog entry is not a builder base ---------------------
+# jq -r prints the literal "null" for a missing key, which is not empty, so a
+# browser_url-only entry used to resolve and the build tried to fetch "null".
+check "a browser-only catalog id resolves to nothing" \
+  "$(forge_catalog_url pfSense_Netgate_Installer)" ""
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

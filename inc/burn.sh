@@ -37,6 +37,16 @@ case "$parse_status" in
   *) isoforge_show_help burn; exit 2 ;;
 esac
 
+# isoforge_parse_config_only_args assigns CONFIG_FILE only when --config was
+# given, and everything below the exec is unreachable -- so the default has to
+# be here, before the handoff, or `./burn` with no arguments dies on an unbound
+# variable under set -u. inc/isoforge.sh does the same, before its own exec.
+CONFIG_FILE="${CONFIG_FILE:-$REPO_ROOT/config.json}"
+
+# Burning is Ventoy-only. Keep this compatibility entrypoint, but hand off to
+# the main workflow instead of writing a raw image with dd.
+exec env CONFIG_FILE="$CONFIG_FILE" "$REPO_ROOT/inc/isoforge.sh" "$@"
+
 if [[ ! -f "$SCRIPT_HELPERS_DIR/helpers.sh" ]]; then
   >&2 printf "Missing required helper library: %s\n" "$SCRIPT_HELPERS_DIR/helpers.sh"
   >&2 printf "Please install project submodules (e.g. run 'git submodule update --init --recursive') and retry.\n"
@@ -51,7 +61,6 @@ shlib_import logging dialog file os deps
 reset_tui() { tput cnorm 2>/dev/null || true; tput rmcup 2>/dev/null || true; clear; }
 trap reset_tui EXIT INT TERM
 
-CONFIG_FILE="${CONFIG_FILE:-$REPO_ROOT/config.json}"
 
 DOWNLOAD_DIR=""
 DEVICE_FILTER="usb"

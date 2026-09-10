@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # DESCRIPTION: Build a custom installable ISO from a base image and a recipe.
-# USAGE: forge --recipe PATH [--config PATH] [--output DIR] [--work-dir DIR] [--dry-run] [--smoke-test] [--keep] [--version] [--help]
+# USAGE: forge --recipe PATH [--base-iso PATH] [--config PATH] [--output DIR] [--work-dir DIR] [--dry-run] [--smoke-test] [--keep] [--version] [--help]
 # PARAMETERS:
 #   -r, --recipe PATH   Recipe to build. Required.
+#       --base-iso PATH Override the recipe base with a local ISO.
 #   -o, --output DIR    Where to write the ISO. Defaults to download_dir from config.json.
 #       --config PATH   Override the config file the distro catalog is read from.
 #       --work-dir DIR  Scratch space for the build. Defaults to /var/tmp/isoforge.
@@ -51,6 +52,7 @@ WORK_DIR="${ISOFORGE_WORK_DIR:-/var/tmp/isoforge}"
 DRY_RUN=0
 SMOKE_TEST=0
 KEEP_WORK=0
+BASE_ISO_OVERRIDE=""
 
 usage() { display_help; }
 
@@ -58,6 +60,7 @@ parse_args() {
   while (($#)); do
     case "$1" in
       -r|--recipe)   RECIPE_PATH="${2:-}"; shift 2 ;;
+      --base-iso)    BASE_ISO_OVERRIDE="${2:-}"; shift 2 ;;
       -o|--output)   OUTPUT_DIR="${2:-}"; shift 2 ;;
       # `isoforge build` forwards its arguments here, and `isoforge` documents
       # --config, so it has to mean the same thing on both sides.
@@ -80,6 +83,10 @@ parse_args() {
 
   if [[ ! -f "$CONFIG_FILE" ]]; then
     log_error "Config file not found: $CONFIG_FILE"
+    exit 2
+  fi
+  if [[ -n "$BASE_ISO_OVERRIDE" && ! -f "${BASE_ISO_OVERRIDE/#\~/$HOME}" ]]; then
+    log_error "Base ISO not found: $BASE_ISO_OVERRIDE"
     exit 2
   fi
 }
@@ -140,16 +147,35 @@ main() {
   if ((DRY_RUN)); then
     local base_id
     base_id=$(recipe_get '.base.catalog_id // ""')
-    if [[ -n "$base_id" ]]; then
+    if [[ -n "$BASE_ISO_OVERRIDE" ]]; then
+      if ! recipe_base_is_compatible "$BASE_ISO_OVERRIDE"; then
+        log_error "Base ISO is not compatible with this recipe: $BASE_ISO_OVERRIDE"
+        exit 2
+      fi
+      log_info "Base:    $BASE_ISO_OVERRIDE (local override)"
+    elif [[ -n "$base_id" ]]; then
       local url
       url=$(forge_catalog_url "$base_id")
       if [[ -z "$url" ]]; then
         log_error "base.catalog_id '$base_id' is not in $CONFIG_FILE"
         exit 2
       fi
+      # The same guard the real build applies to the resolved base below, on
+      # the filename this recipe would download. Without it a dry-run reports
+      # "Recipe is valid" for a base the build then refuses.
+      if ! recipe_base_is_compatible "$url"; then
+        log_error "Base ISO is not compatible with this recipe: $(basename -- "$url")"
+        exit 2
+      fi
       log_info "Base:    $base_id -> $url"
     else
-      log_info "Base:    $(recipe_get '.base.url // .base.iso')"
+      local configured_base
+      configured_base=$(recipe_get '.base.url // .base.iso')
+      if ! recipe_base_is_compatible "$configured_base"; then
+        log_error "Base ISO is not compatible with this recipe: $(basename -- "$configured_base")"
+        exit 2
+      fi
+      log_info "Base:    $configured_base"
     fi
     log_info "Recipe is valid. Nothing was downloaded or written."
     exit 0
@@ -170,7 +196,11 @@ main() {
   local iso_dir="$WORK_DIR/iso"
   local rootfs="$WORK_DIR/rootfs"
 
-  forge_resolve_base "$cache_dir" || exit $?
+  forge_resolve_base "$cache_dir" "$BASE_ISO_OVERRIDE" || exit $?
+  if ! recipe_base_is_compatible "$FORGE_BASE_ISO"; then
+    log_error "Resolved base ISO is not compatible with this recipe: $FORGE_BASE_ISO"
+    exit 2
+  fi
   forge_verify_base "$FORGE_BASE_ISO" || exit $?
 
   forge_extract_iso "$FORGE_BASE_ISO" "$iso_dir" || exit $?

@@ -6,7 +6,10 @@ FORGE_BASE_ISO=""
 
 forge_catalog_url() {
   local id="$1"
-  jq -r --arg id "$id" '.distros[] | select(.id == $id) | .url' "$CONFIG_FILE" | head -1
+  # `// empty`, not a bare .url: browser-only entries carry browser_url and no
+  # url, and `jq -r` prints the literal "null" for a missing key -- which is
+  # not empty, so callers accepted it and the build tried to download "null".
+  jq -r --arg id "$id" '.distros[] | select(.id == $id) | .url // empty' "$CONFIG_FILE" | head -1
 }
 
 forge_catalog_ids() {
@@ -39,8 +42,19 @@ forge_download() {
 # A base ISO is named one of three ways, and recipe_validate has already
 # rejected a recipe that gives more than one.
 forge_resolve_base() {
-  local cache_dir="$1"
+  local cache_dir="$1" base_override="${2:-}"
   local id url iso
+
+  if [[ -n "$base_override" ]]; then
+    iso="${base_override/#\~/$HOME}"
+    if [[ ! -f "$iso" ]]; then
+      log_error "Base ISO does not exist: $iso"
+      return 2
+    fi
+    FORGE_BASE_ISO="$iso"
+    log_info "Using local base image override: $FORGE_BASE_ISO"
+    return 0
+  fi
 
   id=$(recipe_get '.base.catalog_id // ""')
   url=$(recipe_get '.base.url // ""')

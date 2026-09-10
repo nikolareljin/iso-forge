@@ -1,5 +1,5 @@
 Name:           isoforge
-Version:        2.1.3
+Version:        2.2.0
 Release:        1%{?dist}
 Summary:        TUI tool for downloading and flashing ISO images to USB
 License:        MIT
@@ -25,6 +25,8 @@ mkdir -p %{buildroot}/usr/share/isoforge
 mkdir -p %{buildroot}/usr/share/isoforge/inc
 mkdir -p %{buildroot}/usr/share/isoforge/scripts
 mkdir -p %{buildroot}/usr/share/isoforge/recipes
+mkdir -p %{buildroot}/usr/share/isoforge/assets
+mkdir -p %{buildroot}/usr/share/doc/isoforge
 mkdir -p %{buildroot}/usr/share/man/man1
 
 install -m 0755 inc/isoforge.sh %{buildroot}/usr/bin/isoforge
@@ -33,6 +35,8 @@ install -m 0644 config.json %{buildroot}/usr/share/isoforge/config.json
 install -m 0644 VERSION %{buildroot}/usr/share/isoforge/VERSION
 cp -a scripts/* %{buildroot}/usr/share/isoforge/scripts/
 cp -a recipes/* %{buildroot}/usr/share/isoforge/recipes/
+cp -a assets/* %{buildroot}/usr/share/isoforge/assets/
+install -m 0644 docs/USER-GUIDE.md %{buildroot}/usr/share/doc/isoforge/USER-GUIDE.md
 install -m 0644 docs/man/isoforge.1 %{buildroot}/usr/share/man/man1/isoforge.1
 
 %files
@@ -42,9 +46,17 @@ install -m 0644 docs/man/isoforge.1 %{buildroot}/usr/share/man/man1/isoforge.1
 /usr/share/isoforge/VERSION
 /usr/share/isoforge/scripts
 /usr/share/isoforge/recipes
+/usr/share/isoforge/assets
+/usr/share/doc/isoforge/USER-GUIDE.md
 /usr/share/man/man1/isoforge.1
 
 %changelog
+* Thu Sep 10 2026 Nikola Reljin <nikola.reljin@gmail.com> - 2.2.0-1
+- Add Ventoy-first USB preparation and ISO Creator workflows
+- Add NikOS post-install recipe, bundled backgrounds and expanded catalog
+- Open authenticated catalog sources in the browser
+- Replace obsolete exfat-utils and refresh generated CLI documentation
+
 * Thu Sep 03 2026 Nikola Reljin <nikola.reljin@gmail.com> - 2.1.3-1
 - Go back to a plain working directory; the rpm _topdir fix is in ci-helpers
 

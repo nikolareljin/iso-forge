@@ -11,6 +11,10 @@ base:
   catalog_id: Xubuntu_24_04_4_desktop_amd64
   # sha256: <checksum of the base image>   # optional, but checked when given
 
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+
 output:
   name: example-24.04-amd64
   volume_id: EXAMPLE_2404

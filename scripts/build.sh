@@ -44,7 +44,7 @@ done
 
 cd "$ROOT_DIR"
 
-required_files=(VERSION config.json inc/forge.sh recipes/example.yml recipes/nikos.yml scripts/verify-nikos-iso.sh tools/build-deb.sh tools/build-rpm.sh tools/build-brew-tarball.sh)
+required_files=(VERSION config.json inc/forge.sh recipes/example.yml recipes/nikos.yml scripts/verify-nikos-iso.sh assets/isoforge-logo.svg assets/ventoy/isoforge-background.png assets/ventoy/nikos-background.png tools/build-deb.sh tools/build-rpm.sh tools/build-brew-tarball.sh)
 for f in "${required_files[@]}"; do
     [[ -e "$f" ]] || { echo "Missing required file: $f" >&2; exit 1; }
 done

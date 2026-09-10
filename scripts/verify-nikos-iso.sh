@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Assert that a built image really is NikOS, and not a stock Xubuntu that
-# happened to survive the pipeline.
+# Assert that a built image carries the NikOS post-install launcher while
+# preserving the stock Xubuntu system it will install.
 #
 #   scripts/verify-nikos-iso.sh path/to/nikos-24.04-amd64.iso
 #
 # Checks the image itself (bootable, labelled, checksummed) and then the root
-# filesystem inside it (the NikOS CLI, its Plymouth theme, its desktop package
-# set, and the /etc/skel handoff that makes an installed account inherit the
-# desktop). Everything here reads the artifact; nothing trusts the build log.
+# filesystem inside it (the NikOS profile, launcher, and desktop entry).
+# Everything here reads the artifact; nothing trusts the build log.
 set -euo pipefail
 
 ISO="${1:-}"
@@ -60,7 +59,7 @@ else
 fi
 
 volid=$(xorriso -indev "$ISO" -pvd_info 2>&1 | sed -n "s/^Volume id *: *'\(.*\)'$/\1/p" | head -1)
-check "volume id is the recipe's" "$volid" "NIKOS_2404"
+check "volume id is the recipe's" "$volid" "NIKOS_XUBUNTU_2404"
 
 # The build writes a checksum beside the image. Recomputing it here is what
 # turns that file into evidence: without this a truncated or corrupted image
@@ -84,7 +83,7 @@ xorriso -osirrox on -indev "$ISO" -extract / "$WORK/iso" >/dev/null 2>&1
 chmod -R u+w "$WORK/iso" 2>/dev/null || true
 
 have "casper/ is present" "$WORK/iso/casper"
-check ".disk/info names the build" "$(cat "$WORK/iso/.disk/info" 2>/dev/null)" "NIKOS_2404"
+check ".disk/info names the build" "$(cat "$WORK/iso/.disk/info" 2>/dev/null)" "NIKOS_XUBUNTU_2404"
 
 # On a layered image the squashfs files are diffs, so inspecting any one of
 # them says nothing: the base layer has no NikOS in it and the top layer has
@@ -180,7 +179,7 @@ else
 fi
 
 echo
-echo "== NikOS inside the root filesystem =="
+echo "== NikOS post-install launcher inside the root filesystem =="
 # Unpack the layers in order into one directory, so what is inspected is the
 # filesystem the installer would produce rather than any single diff.
 # -no-xattrs so this works unprivileged; ownership is irrelevant here.
@@ -246,23 +245,27 @@ if ((${#missing_structure[@]})); then
 fi
 ok "the root filesystem unpacks"
 
-# site.yml's post_tasks install the CLI here. Its presence is the single
-# clearest signal that the playbook ran to completion rather than dying midway.
-have "the nikos CLI is installed" "$WORK/root/usr/local/bin/nikos"
+# The image must carry a launcher and its profile, but not a preinstalled NikOS
+# workstation. The native NikOS installer runs only after Xubuntu has completed
+# its own installation and the user makes their profile and bundle selections.
+have "the NikOS post-install launcher is installed" "$WORK/root/usr/local/bin/nikos-installer"
+have "the Xubuntu 24.04 NikOS profile is installed" "$WORK/root/usr/share/iso-forge/nikos-profiles/xubuntu-24.04.env"
+have "the Install NikOS desktop entry is installed" "$WORK/root/usr/share/applications/nikos-installer.desktop"
 
-# The theming role copies the pre-rendered boot chrome into place.
-have "the NikOS Plymouth theme is installed" "$WORK/root/usr/share/plymouth/themes/nikos"
-
-# The desktop role's package set.
-have "the Xfce session is present" "$WORK/root/usr/bin/xfce4-session"
-have "LightDM is present" "$WORK/root/usr/sbin/lightdm"
-
-# The reason skel_home exists: an account created by the installer has to come
-# out looking like NikOS, and /etc/skel is what it is seeded from.
-if [[ -d "$WORK/root/etc/skel" ]] && [[ -n "$(find "$WORK/root/etc/skel" -mindepth 1 -maxdepth 2 -name 'xfce4' -o -mindepth 1 -maxdepth 2 -name '.config' 2>/dev/null)" ]]; then
-  ok "/etc/skel carries desktop configuration for new accounts"
+if grep -q '^Exec=nikos-installer$' "$WORK/root/usr/share/applications/nikos-installer.desktop" 2>/dev/null; then
+  ok "the desktop entry starts the post-install launcher"
 else
-  bad "/etc/skel carries desktop configuration for new accounts"
+  bad "the desktop entry starts the post-install launcher"
+fi
+if grep -q 'boot=casper' "$WORK/root/usr/local/bin/nikos-installer" 2>/dev/null; then
+  ok "the launcher refuses to run from the live session"
+else
+  bad "the launcher refuses to run from the live session"
+fi
+if [[ ! -e "$WORK/root/usr/local/bin/nikos" ]]; then
+  ok "NikOS itself was not preinstalled into Xubuntu"
+else
+  bad "NikOS itself was not preinstalled into Xubuntu"
 fi
 
 # The build's own cleanup, verified on the artifact rather than trusted.

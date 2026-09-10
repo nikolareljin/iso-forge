@@ -53,16 +53,25 @@ shlib_import logging deps os
 
 print_info "Installing project dependencies via script-helpers ..."
 
+# Debian-family systems name this package xz-utils; Fedora and Arch use xz.
+xz_dependency_package() {
+  if command -v apt-get >/dev/null 2>&1; then
+    printf '%s\n' xz-utils
+  else
+    printf '%s\n' xz
+  fi
+}
+
 # Default deps cover dialog, curl, jq, wget, util-linux, coreutils (for dd/stat).
 # You can pass custom package names as arguments if needed.
 if [[ $# -gt 0 ]]; then
   install_dependencies "$@"
 else
   # Include common tools for Ventoy workflow and copying
-  # exfatprogs/exfat-utils for mounting Ventoy exFAT, rsync for copy with progress
+  # exfatprogs for mounting Ventoy exFAT, rsync for copy with progress
   # xorriso/squashfs-tools/python3-yaml are what `./forge` needs to build an image
-  install_dependencies dialog curl jq wget util-linux coreutils rsync exfatprogs exfat-utils parted \
-    xorriso squashfs-tools python3-yaml
+  install_dependencies dialog curl jq wget util-linux coreutils rsync exfatprogs parted \
+    xorriso squashfs-tools python3-yaml "$(xz_dependency_package)" gzip bzip2
 fi
 
 print_success "Dependencies installed."

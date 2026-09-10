@@ -1,3 +1,16 @@
+isoforge (2.2.0) unstable; urgency=medium
+
+  * Add Ventoy-first multi-ISO USB preparation and ISO Creator workflows.
+  * Add the NikOS post-install Xubuntu recipe and bundled Ventoy backgrounds.
+  * Expand the catalog with Ubuntu Server, Proxmox VE, OpenMediaVault,
+    OPNsense and TrueNAS Community sources.
+  * Open authenticated catalog sources in the user's browser instead of
+    attempting an unauthenticated download.
+  * Replace obsolete exfat-utils with exfatprogs and keep generated CLI
+    documentation current.
+
+ -- Nikola Reljin <nikola.reljin@gmail.com>  Thu, 10 Sep 2026 00:00:00 +0000
+
 isoforge (2.1.3) unstable; urgency=medium
 
   * Go back to a plain working directory; the rpm _topdir fix is in ci-helpers.

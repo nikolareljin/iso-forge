@@ -2,7 +2,7 @@
 
 isoforge_main_help() {
   cat <<'HELP'
-Isoforge downloads Linux images, writes them to USB, and builds custom installable ISOs.
+Isoforge downloads Linux images, prepares Ventoy USB drives, and builds custom installable ISOs.
 
 Usage:
   isoforge [OPTIONS]
@@ -11,8 +11,8 @@ Usage:
 
 Commands:
   download      Download one or more ISOs from config.json.
-  burn          Write an ISO from download_dir, or a browsed local ISO, to a drive.
-  build         Build a custom installable ISO from a recipe.
+  burn          Prepare a Ventoy drive and copy selected ISO files to it.
+  build         Build a custom installable ISO from a recipe. The TUI also provides ISO Creator.
   setup         Install project dependencies.
   help          Show command help.
 
@@ -47,13 +47,13 @@ Environment:
 
 Config:
   download_dir   Directory where downloaded images are saved.
-  distros        Array of { id, label, url } items shown in the selector.
+  distros        Direct { id, label, url } or authenticated { id, label, browser_url } selector entries.
 HELP
 }
 
 isoforge_burn_help() {
   cat <<'HELP'
-Write a selected ISO to a selected drive.
+Prepare a Ventoy drive and copy selected ISO files to it.
 
 Usage:
   isoforge burn [OPTIONS]
@@ -68,7 +68,7 @@ Config:
   block_device_filter   Drive filter. Use "usb" for USB/removable devices, or "any".
 
 Notes:
-  Burn uses dd and destroys data on selected destination drive.
+  Burn installs Ventoy and destroys data on the selected destination drive.
 HELP
 }
 
@@ -82,6 +82,7 @@ Usage:
 
 Options:
   -r, --recipe PATH   Recipe to build. Required.
+      --base-iso PATH Override the recipe base with a local ISO.
   -o, --output DIR    Where to write the ISO. Defaults to download_dir from config.json.
       --config PATH   Override config file path.
       --work-dir DIR  Scratch space for build. Defaults to /var/tmp/isoforge.
@@ -108,8 +109,9 @@ Parameters:
   PACKAGE        Optional package names to install instead of default dependency set.
 
 Default Dependencies:
-  dialog curl jq wget util-linux coreutils rsync exfatprogs exfat-utils parted
-  xorriso squashfs-tools python3-yaml
+  dialog curl jq wget util-linux coreutils rsync exfatprogs parted
+  xorriso squashfs-tools python3-yaml xz-utils (Debian/Ubuntu) or xz (Fedora/Arch)
+  gzip bzip2
 HELP
 }
 

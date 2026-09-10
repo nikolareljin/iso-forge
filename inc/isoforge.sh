@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # SCRIPT: isoforge.sh
-# DESCRIPTION: Isoforge downloads Linux images, writes them to USB (single image or Ventoy multi-ISO), and builds custom installable ISOs from a recipe.
+# DESCRIPTION: Isoforge downloads Linux images, prepares Ventoy USB drives, and builds custom installable ISOs from a base ISO and recipe.
 # USAGE: isoforge [OPTIONS] [COMMAND [COMMAND_OPTIONS]]
 # EXAMPLE: isoforge --config ./config.json
 # EXAMPLE: sudo isoforge build --recipe recipes/nikos.yml
 # PARAMETERS:
 #   download        Download one or more ISOs from config.json. Options: --config PATH, -h, --help.
-#   burn            Write an ISO from download_dir, or a browsed local ISO, to a drive. Options: --config PATH, -h, --help.
-#   build           Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
+#   burn            Prepare a Ventoy drive and copy selected ISO files to it. Options: --config PATH, -h, --help.
+#   build           Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, --base-iso PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
 #   setup           Install project dependencies. Parameters: PACKAGE. Options: -h, --help.
 #   help [COMMAND]  Show top-level help or command help for download, burn, build, or setup.
 #   --config PATH   Override config file path for the TUI flow.
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # CLI Isoforge-like interface using dialog
-# Steps: Select Image -> Select Drive -> Flash!
+# Steps: Select Images -> Select Drive -> Prepare Ventoy!
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ISOFORGE_ROOT="${ISOFORGE_ROOT:-}"
@@ -99,7 +99,9 @@ parse_cli_args() {
           isoforge_show_help burn
           exit 0
         fi
-        exec "$REPO_ROOT/inc/burn.sh" "$@"
+        printf 'The interactive Ventoy workflow is used for burning.
+' >&2
+        exec env CONFIG_FILE="$CONFIG_FILE" "$REPO_ROOT/inc/isoforge.sh" "$@"
         ;;
       setup)
         shift
@@ -139,7 +141,9 @@ DOWNLOAD_DIR=""
 DEVICE_FILTER="usb"
 # Multi-image (Ventoy) and background support
 declare -a SELECTED_IMAGES=()
-SELECTED_BACKGROUND=""
+# Ventoy uses this bundled background unless the user chooses another one.
+SELECTED_BACKGROUND="$REPO_ROOT/assets/ventoy/isoforge-background.png"
+VENTOY_OWNED_DATA_MOUNT=""
 
 restore_main_menu_snapshot() {
   local saved_image="$1"
@@ -194,6 +198,27 @@ is_allowed_download_url() {
   return 1
 }
 
+open_browser_catalog_source() {
+  local id="$1" browser_url="$2"
+
+  if ! is_browser_url "$browser_url"; then
+    dialog --title "Unsupported browser URL" --msgbox \
+      "The selected source does not provide a safe HTTPS browser URL." 7 64
+    return 1
+  fi
+  if ! dialog --title "Open authenticated source" --yesno \
+    "${id} requires authentication and cannot be downloaded directly.\n\nOpen the vendor page in your browser now?" 10 72; then
+    return 2
+  fi
+  if ! open_browser_url "$browser_url"; then
+    dialog --title "Browser unavailable" --msgbox \
+      "Could not open a browser. Open this URL manually:\n\n${browser_url}" 10 76
+    return 1
+  fi
+  dialog --title "Browser opened" --msgbox \
+    "Complete the vendor download in your browser. When it finishes, return here, choose Select ISO files, then Browse any folder for an image." 11 76
+}
+
 load_config() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
     print_error "Config file not found: $CONFIG_FILE"
@@ -213,42 +238,80 @@ load_config() {
   DEVICE_FILTER=$(jq -r '.block_device_filter // "usb"' "$CONFIG_FILE")
 }
 
-# Show a minimal TUI gauge while installing dependencies; suppress detailed output to a log.
+# Return success when the selected package manager will require sudo.
+package_manager_requires_sudo() {
+  [[ "${EUID:-$(id -u)}" -ne 0 ]] || return 1
+  command -v apt-get >/dev/null 2>&1 || \
+    command -v dnf >/dev/null 2>&1 || \
+    command -v pacman >/dev/null 2>&1
+}
+
+# Ask for permission and authenticate before a dialog owns the terminal. The
+# dependency helper invokes sudo itself; pre-validating here keeps its password
+# prompt from being hidden behind an installation UI.
+prepare_dependency_installation() {
+  local packages="$*"
+  local prompt="Isoforge needs to install:\n\n${packages}\n\nContinue?"
+
+  if command -v dialog >/dev/null 2>&1; then
+    dialog_init
+    dialog --title "Install Dependencies" --defaultno --yesno "$prompt" 12 "$DIALOG_WIDTH" || return 1
+  else
+    [[ -t 0 ]] || {
+      print_error "Dependencies are missing. Run ./setup in an interactive terminal."
+      return 1
+    }
+    local reply
+    read -r -p "Isoforge needs to install: ${packages}. Continue? [y/N] " reply || return 1
+    [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]] || return 1
+  fi
+
+  if package_manager_requires_sudo; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      print_error "A supported package manager requires sudo, but sudo is not available. Run ./setup as an administrator."
+      return 1
+    fi
+    sudo -v || {
+      print_error "Administrator authentication failed. Dependencies were not installed."
+      return 1
+    }
+  fi
+}
+
+# Show the package manager's real output in a dialog and retain it in a log.
+# This deliberately avoids a made-up percentage: package managers do not
+# expose a portable progress value, and a hidden sudo prompt used to make the
+# old gauge loop forever.
 deps_install_with_dialog() {
   local log="$REPO_ROOT/.deps_install.log"
   : >"$log"
-  local status_file="$REPO_ROOT/.deps_status.tmp"
-  local pkgs=("$@")
   dialog_init
-  (
-    set +e
-    install_dependencies "${pkgs[@]}" >>"$log" 2>&1 &
-    local pid=$!
-    local pct=1
-    while kill -0 "$pid" 2>/dev/null; do
-      pct=$((pct + 3)); (( pct >= 99 )) && pct=1
-      echo "XXX"; echo "$pct"; echo "Installing: ${pkgs[*]}"; echo "XXX"
-      sleep 0.3
-    done
-    wait "$pid"; local rc=$?
-    echo "$rc" >"$status_file"
-    echo "XXX"; echo 100; echo "Finalizing..."; echo "XXX"
-  ) | dialog --title "Installing Dependencies" --gauge "Preparing..." 10 "$DIALOG_WIDTH" 0
-  local rc; rc=$(cat "$status_file" 2>/dev/null || echo 1)
-  rm -f "$status_file"
-  return "$rc"
+  local errexit_was_on=0
+  [[ $- == *e* ]] && errexit_was_on=1
+  set +e
+  install_dependencies "$@" 2>&1 | tee -a "$log" | \
+    dialog --title "Installing Dependencies" --programbox 20 "$DIALOG_WIDTH"
+  local -a statuses=("${PIPESTATUS[@]}")
+  (( errexit_was_on )) && set -e
+  return "${statuses[0]}"
 }
 
-# Install required tools if missing using script-helpers (quiet; with TUI progress)
+# Install required tools if missing using script-helpers.
 ensure_deps() {
   local log="$REPO_ROOT/.deps_install.log"
   : >"$log"
 
-  # 1) Ensure 'dialog' exists first so we can use TUI for the rest.
+  # Ensure dialog exists first so the remaining install can display live output.
   if ! command -v dialog >/dev/null 2>&1; then
-    echo "Installing prerequisite: dialog" >>"$log"
-    # Best effort; do not spam terminal
-    install_dependencies dialog >>"$log" 2>&1 || true
+    prepare_dependency_installation dialog || return 1
+    if ! install_dependencies dialog 2>&1 | tee -a "$log"; then
+      print_error "Failed to install dialog. Details were saved to: $log"
+      return 1
+    fi
+    if ! command -v dialog >/dev/null 2>&1; then
+      print_error "dialog is still unavailable after installation. Details were saved to: $log"
+      return 1
+    fi
   fi
 
   # 2) Compute remaining missing dependencies
@@ -263,22 +326,26 @@ ensure_deps() {
   command -v rsync >/dev/null 2>&1    || pkgs+=(rsync)
   command -v unzip >/dev/null 2>&1    || pkgs+=(unzip)
   command -v less  >/dev/null 2>&1    || pkgs+=(less)
-  command -v xz    >/dev/null 2>&1    || pkgs+=(xz xz-utils)
+  command -v xz    >/dev/null 2>&1    || pkgs+=("$(xz_dependency_package)")
   command -v gzip  >/dev/null 2>&1    || pkgs+=(gzip)
-  # Optional preview tool: chafa (cross-platform terminal image viewer)
-  command -v chafa  >/dev/null 2>&1   || pkgs+=(chafa)
+  command -v bzip2 >/dev/null 2>&1    || pkgs+=(bzip2)
 
   if [[ ${#pkgs[@]} -gt 0 ]]; then
-    if command -v dialog >/dev/null 2>&1; then
-      if ! deps_install_with_dialog "${pkgs[@]}"; then
-        # Keep details in the log, but inform user with a concise dialog
-        dialog --title "Dependencies" --msgbox \
-          "Some dependencies failed to install.\n\nYou can review the log at:\n$log" 10 60
-      fi
-    else
-      # Fallback: install quietly without TUI
-      install_dependencies "${pkgs[@]}" >>"$log" 2>&1 || true
+    prepare_dependency_installation "${pkgs[@]}" || return 1
+    if ! deps_install_with_dialog "${pkgs[@]}"; then
+      dialog --title "Dependencies" --msgbox \
+        "Dependencies failed to install.\n\nYou can review the log at:\n$log" 10 60
+      return 1
     fi
+  fi
+}
+
+# Debian-family systems name this package xz-utils; Fedora and Arch use xz.
+xz_dependency_package() {
+  if command -v apt-get >/dev/null 2>&1; then
+    printf '%s\n' xz-utils
+  else
+    printf '%s\n' xz
   fi
 }
 
@@ -292,11 +359,11 @@ ensure_dialog() {
 title() { echo "Isoforge (CLI) — iso-forge"; }
 
 show_summary() {
-  local img="${SELECTED_IMAGE:-<not selected>}"
+  local img="<not selected>"
   local dev="${SELECTED_DEVICE:+/dev/$SELECTED_DEVICE}"
   [[ -z "$dev" ]] && dev="<not selected>"
   local multi_count=${#SELECTED_IMAGES[@]}
-  [[ $multi_count -gt 1 ]] && img="${multi_count} images (Ventoy)"
+  [[ $multi_count -gt 0 ]] && img="${multi_count} image(s) (Ventoy)"
   local bg="${SELECTED_BACKGROUND:-<none>}"
   printf "Images: %s\nDrive: %s\nBackground: %s\n" "$img" "$dev" "$bg"
   if has_last_download_error; then
@@ -308,18 +375,16 @@ select_image_source() {
   dialog_init
   local choice
   choice=$(dialog --stdout --title "$(title)" --menu "Select image source" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
-    download "Choose from curated distros (single download)" \
-    download_multi "Choose multiple from curated distros (download)" \
-    file     "Choose local .iso file (single)" \
-    multi    "Choose multiple local .iso files" \
+    download "Choose from curated distros" \
+    local    "Choose from IsoForge downloads" \
+    browse   "Browse any folder for an image" \
     back     "Back") || return 1
 
   case "$choice" in
-    download)        select_image_from_config        ;;
-    download_multi)  select_images_from_config_multi ;;
-    file)            select_image_local              ;;
-    multi)           select_images_local_multi       ;;
-    back)            return 0                        ;;
+    download) select_images_from_config_multi ;;
+    local)    select_images_local_multi       ;;
+    browse)   select_image_local              ;;
+    back)     return 0                         ;;
   esac
 }
 
@@ -328,7 +393,7 @@ select_images_from_config_multi() {
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
-  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url)"' "$CONFIG_FILE")
+  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // "")\t\(.browser_url // "")"' "$CONFIG_FILE")
   if [[ ${#rows[@]} -eq 0 ]]; then
     dialog --title "No distros" --msgbox "No distros defined in config.json" 8 50
     return 1
@@ -341,10 +406,11 @@ select_images_from_config_multi() {
     if [[ "$lower" == *"android-x86"* || "$lower" == *"bliss os"* || "$lower" == *"lineageos"* || "$lower" == *"grapheneos"* ]]; then echo "Android / Tablet"; return; fi
     if [[ "$lower" == *"gparted"* || "$lower" == *"rescue"* || "$lower" == *"hiren"* || "$lower" == *"clonezilla"* ]]; then echo "Utilities / Repair"; return; fi
     if [[ "$lower" == *"surface"* || "$lower" == *"xbox"* ]]; then echo "Surface / Xbox"; return; fi
+    if [[ "$lower" == *"server"* || "$lower" == *"proxmox"* || "$lower" == *"openmediavault"* || "$lower" == *"opnsense"* || "$lower" == *"pfsense"* || "$lower" == *"truenas"* ]]; then echo "Server / Infrastructure"; return; fi
     echo "Desktop / Linux"
   }
   for line in "${rows[@]}"; do
-    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; url="${line##*$'\t'}"
+    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"; url="${rest%%$'\t'*}"
     cat=$(distro_category "$id" "$label")
     if [[ "$cat" != "$prev_cat" ]]; then
       items+=("hdr_${cat// /_}" "==== $cat ====" off)
@@ -352,19 +418,37 @@ select_images_from_config_multi() {
     fi
     items+=("$id" "$label" off)
   done
-  local chosen
-  chosen=$(dialog --stdout --title "Choose Distros (multi)" --checklist "Pick one or more to download" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}") || return 1
-  chosen=$(sed 's/\"//g' <<<"$chosen")
-  [[ -z "$chosen" ]] && return 1
+  local selection_file
+  selection_file=$(mktemp) || return 1
+  if ! dialog --stdout --separate-output --title "Choose Distros (multi)" --checklist "Pick one or more to download" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}" >"$selection_file"; then
+    rm -f "$selection_file"
+    return 1
+  fi
+  local -a chosen=()
+  mapfile -t chosen <"$selection_file"
+  rm -f "$selection_file"
+  [[ ${#chosen[@]} -gt 0 ]] || return 1
 
   pushd "$DOWNLOAD_DIR" >/dev/null
   SELECTED_IMAGES=()
   local -a skipped_insecure=()
   local -a skipped_unsupported=()
-  local id url output path errs=0 download_failed=0
-  for id in $chosen; do
+  local id url browser_url output path normalized_path errs=0 download_failed=0 browser_handoffs=0 browser_status
+  for id in "${chosen[@]}"; do
     [[ "$id" == hdr_* ]] && continue
-    url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .url' "$CONFIG_FILE")
+    browser_url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .browser_url // empty' "$CONFIG_FILE")
+    if [[ -n "$browser_url" ]]; then
+      if open_browser_catalog_source "$id" "$browser_url"; then
+        browser_handoffs=$((browser_handoffs+1))
+      else
+        browser_status=$?
+        if (( browser_status != 2 )); then
+          errs=$((errs+1))
+        fi
+      fi
+      continue
+    fi
+    url=$(jq -r --arg id "$id" '.distros[] | select(.id==$id) | .url // empty' "$CONFIG_FILE")
     [[ -z "$url" || "$url" == "null" ]] && { errs=$((errs+1)); continue; }
     if [[ "$url" != https://* && "$url" != http://* ]]; then
       errs=$((errs+1))
@@ -384,7 +468,14 @@ select_images_from_config_multi() {
       fi
     fi
     path="$DOWNLOAD_DIR/$output"
-    if [[ -f "$path" ]]; then SELECTED_IMAGES+=("$path"); fi
+    if [[ -f "$path" ]]; then
+      if normalized_path=$(normalize_ventoy_image "$path"); then
+        SELECTED_IMAGES+=("$normalized_path")
+      else
+        errs=$((errs+1))
+        skipped_unsupported+=("$id (unable to unpack compressed image)")
+      fi
+    fi
   done
   popd >/dev/null
   if (( errs > 0 )); then
@@ -407,6 +498,8 @@ select_images_from_config_multi() {
     SELECTED_IMAGE="${SELECTED_IMAGES[0]}"
   elif [[ ${#SELECTED_IMAGES[@]} -gt 1 ]]; then
     SELECTED_IMAGE=""
+  elif (( browser_handoffs > 0 )); then
+    return 1
   else
     dialog --title "Download" --msgbox "No files downloaded/selected." 7 40
     return 1
@@ -418,9 +511,9 @@ select_images_local_multi() {
   dialog_init
   load_config
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
-  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f -iname "*.iso" 2>/dev/null | sort)
+  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f \( -iname "*.iso" -o -iname "*.img" -o -iname "*.iso.xz" -o -iname "*.img.xz" -o -iname "*.iso.gz" -o -iname "*.img.gz" -o -iname "*.iso.bz2" -o -iname "*.img.bz2" \) -print 2>/dev/null | sort)
   if [[ ${#files[@]} -eq 0 ]]; then
-    dialog --title "No ISOs" --msgbox "No ISO files found in $DOWNLOAD_DIR. Run ./download to fetch images first." 9 70
+    dialog --title "No boot images" --msgbox "No ISO or raw image files found in $DOWNLOAD_DIR. Run ./download to fetch images first." 9 70
     return 1
   fi
   local items=()
@@ -429,11 +522,29 @@ select_images_local_multi() {
     base=$(basename "$p")
     items+=("$p" "$base" off)
   done
-  local selected
-  selected=$(dialog --stdout --title "Select ISOs (Ventoy)" --checklist "Choose one or more images to copy via Ventoy" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}") || return 1
-  selected=$(sed 's/\"//g' <<<"$selected")
+  local selection_file
+  selection_file=$(mktemp) || return 1
+  if ! dialog --stdout --separate-output --title "Select ISOs (Ventoy)" --checklist "Choose one or more images to copy via Ventoy" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}" >"$selection_file"; then
+    rm -f "$selection_file"
+    return 1
+  fi
+  local -a selected_paths=()
+  mapfile -t selected_paths <"$selection_file"
+  rm -f "$selection_file"
+  [[ ${#selected_paths[@]} -gt 0 ]] || return 1
   SELECTED_IMAGES=()
-  for p in $selected; do SELECTED_IMAGES+=("$p"); done
+  local normalized_path
+  for p in "${selected_paths[@]}"; do
+    if ! normalized_path=$(normalize_ventoy_image "$p"); then
+      dialog --title "Image preparation failed" --msgbox         "Could not unpack the selected image:
+$p
+
+Install the required decompressor and try again." 10 72
+      SELECTED_IMAGES=()
+      return 1
+    fi
+    SELECTED_IMAGES+=("$normalized_path")
+  done
   if [[ ${#SELECTED_IMAGES[@]} -eq 1 ]]; then
     SELECTED_IMAGE="${SELECTED_IMAGES[0]}"
   elif [[ ${#SELECTED_IMAGES[@]} -gt 1 ]]; then
@@ -441,17 +552,32 @@ select_images_local_multi() {
   fi
 }
 
+# Browse outside DOWNLOAD_DIR, for example after a browser-authenticated
+# catalogue handoff. Ventoy accepts ISO/raw images; compressed files are
+# unpacked through the same normalization path as catalogue downloads.
 select_image_local() {
   dialog_init
-  local start_dir="${SELECTED_IMAGE:-$HOME}"
-  local iso
-  iso=$(dialog --stdout --title "$(title) — Select ISO" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
-  if [[ -z "$iso" ]]; then return 1; fi
-  if [[ "${iso,,}" != *.iso ]]; then
-    dialog --title "Invalid file" --msgbox "Selected file is not an .iso" 8 50
+  local start_dir="${DOWNLOAD_DIR:-$HOME}" selected lower normalized_path
+  if [[ -n "${SELECTED_IMAGE:-}" ]]; then
+    start_dir=$(dirname -- "$SELECTED_IMAGE")
+  fi
+  selected=$(dialog --stdout --title "$(title) — Browse for boot image" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
+  [[ -n "$selected" && -f "$selected" ]] || return 1
+  lower=${selected,,}
+  case "$lower" in
+    *.iso|*.img|*.iso.xz|*.img.xz|*.iso.gz|*.img.gz|*.iso.bz2|*.img.bz2) ;;
+    *)
+      dialog --title "Invalid file" --msgbox "Select an ISO, raw image, or supported compressed image." 8 64
+      return 1
+      ;;
+  esac
+  if ! normalized_path=$(normalize_ventoy_image "$selected"); then
+    dialog --title "Image preparation failed" --msgbox "Could not unpack the selected image:
+$selected" 8 72
     return 1
   fi
-  SELECTED_IMAGE="$iso"
+  SELECTED_IMAGES=("$normalized_path")
+  SELECTED_IMAGE="$normalized_path"
 }
 
 select_image_from_config() {
@@ -460,7 +586,7 @@ select_image_from_config() {
   create_directory "$DOWNLOAD_DIR" >/dev/null || true
 
   # Build grouped menu options from config.json
-  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url)"' "$CONFIG_FILE")
+  mapfile -t rows < <(jq -r '.distros[] | "\(.id)\t\(.label)\t\(.url // "")\t\(.browser_url // "")"' "$CONFIG_FILE")
   if [[ ${#rows[@]} -eq 0 ]]; then
     dialog --title "No distros" --msgbox "No distros defined in config.json" 8 50
     return 1
@@ -474,10 +600,11 @@ select_image_from_config() {
     if [[ "$lower" == *"android-x86"* || "$lower" == *"bliss os"* || "$lower" == *"lineageos"* || "$lower" == *"grapheneos"* ]]; then echo "Android / Tablet"; return; fi
     if [[ "$lower" == *"gparted"* || "$lower" == *"rescue"* || "$lower" == *"hiren"* || "$lower" == *"clonezilla"* ]]; then echo "Utilities / Repair"; return; fi
     if [[ "$lower" == *"surface"* || "$lower" == *"xbox"* ]]; then echo "Surface / Xbox"; return; fi
+    if [[ "$lower" == *"server"* || "$lower" == *"proxmox"* || "$lower" == *"openmediavault"* || "$lower" == *"opnsense"* || "$lower" == *"pfsense"* || "$lower" == *"truenas"* ]]; then echo "Server / Infrastructure"; return; fi
     echo "Desktop / Linux"
   }
   for line in "${rows[@]}"; do
-    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; url="${line##*$'\t'}"
+    id="${line%%$'\t'*}"; rest="${line#*$'\t'}"; label="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"; url="${rest%%$'\t'*}"
     cat=$(distro_category "$id" "$label")
     if [[ "$cat" != "$prev_cat" ]]; then
       items+=("hdr_${cat// /_}" "==== $cat ====")
@@ -493,8 +620,13 @@ select_image_from_config() {
     break
   done
 
-  local url output path
-  url=$(jq -r --arg id "$chosen" '.distros[] | select(.id==$id) | .url' "$CONFIG_FILE")
+  local url browser_url output path
+  browser_url=$(jq -r --arg id "$chosen" '.distros[] | select(.id==$id) | .browser_url // empty' "$CONFIG_FILE")
+  if [[ -n "$browser_url" ]]; then
+    open_browser_catalog_source "$chosen" "$browser_url"
+    return 1
+  fi
+  url=$(jq -r --arg id "$chosen" '.distros[] | select(.id==$id) | .url // empty' "$CONFIG_FILE")
   if [[ -z "$url" || "$url" == "null" ]]; then
     dialog --title "Error" --msgbox "No URL found for selected distro." 8 50
     return 1
@@ -528,6 +660,29 @@ select_image_from_config() {
     SELECTED_IMAGE="$path"
   fi
   popd >/dev/null
+}
+
+device_capacity_bytes() {
+  local dev="$1" bytes
+  bytes=$(lsblk -dn -b -o SIZE "/dev/$dev" 2>/dev/null | tr -d '[:space:]')
+  [[ "$bytes" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$bytes"
+}
+
+validate_ventoy_device() {
+  local dev="$1"
+  shift
+  local -a prefix=("$@")
+  local bytes
+  bytes=$(device_capacity_bytes "${dev#/dev/}" || true)
+  if [[ -z "$bytes" || "$bytes" == 0 ]]; then
+    dialog --title "Drive unavailable" --msgbox       "$dev reports no usable capacity. Reconnect the USB drive, wait for it to appear with a non-zero size, then select it again." 9 72
+    return 1
+  fi
+  if ! "${prefix[@]}" dd if="$dev" of=/dev/null bs=1 count=1 status=none 2>/dev/null; then
+    dialog --title "Drive unavailable" --msgbox       "Isoforge cannot read $dev even with administrator privileges. Reconnect the drive or select a different USB device." 9 72
+    return 1
+  fi
 }
 
 select_drive() {
@@ -588,146 +743,221 @@ ensure_flash_drive_selected() {
 flash_image() {
   dialog_init
   ensure_flash_drive_selected || return 1
-  if [[ ${#SELECTED_IMAGES[@]} -gt 1 ]]; then
-    flash_with_ventoy || return 1
-    return 0
+  if [[ ${#SELECTED_IMAGES[@]} -gt 0 ]]; then
+    validate_selected_images || return 1
+    flash_with_ventoy
+    return $?
   fi
-  if [[ -z "${SELECTED_IMAGE:-}" ]]; then
-    dialog --title "Missing selection" --msgbox "Please select an image first." 8 60
-    return 1
-  fi
-  if ! [[ -f "$SELECTED_IMAGE" ]]; then
-    dialog --title "Image missing" --msgbox "Selected image not found: $SELECTED_IMAGE" 8 70
-    return 1
-  fi
-  flash_confirm || return 1
-  local dev="/dev/$SELECTED_DEVICE"
-  local total
-  if stat -c %s "$SELECTED_IMAGE" >/dev/null 2>&1; then
-    total=$(stat -c %s "$SELECTED_IMAGE")
-  else
-    total=$(stat -f%z "$SELECTED_IMAGE" 2>/dev/null || echo 0)
-  fi
+  dialog --title "Missing selection" --msgbox "Please select one or more ISO files first." 8 60
+  return 1
 
-  # Handle compressed images by streaming decompression to dd
-  local lower_img="${SELECTED_IMAGE,,}" use_stream=false stream_cmd=()
-  if [[ "$lower_img" == *.img.xz || "$lower_img" == *.xz ]]; then
-    if command -v xz >/dev/null 2>&1; then
-      stream_cmd=(xz -dc "$SELECTED_IMAGE")
-      use_stream=true
-      total=0
-    else
-      dialog --title "Missing tool" --msgbox "xz not found to decompress image. Install xz/xz-utils and try again." 9 60
+}
+
+validate_selected_images() {
+  local image
+  for image in "${SELECTED_IMAGES[@]}"; do
+    if [[ ! -f "$image" ]]; then
+      dialog --title "Image unavailable" --msgbox \
+        "This selected image is no longer available:\n\n${image}\n\nSelect images again before preparing the USB drive." 11 76
       return 1
     fi
-  elif [[ "$lower_img" == *.img.gz || "$lower_img" == *.gz ]]; then
-    if command -v gzip >/dev/null 2>&1; then
-      stream_cmd=(gzip -dc "$SELECTED_IMAGE")
-      use_stream=true
-      total=0
-    else
-      dialog --title "Missing tool" --msgbox "gzip not found to decompress image." 7 50
-      return 1
-    fi
-  fi
-
-  local dd_args
-  if $use_stream; then
-    dd_args=(dd of="$dev" bs=4M conv=fsync status=progress)
-  else
-    dd_args=(dd if="$SELECTED_IMAGE" of="$dev" bs=4M conv=fsync status=progress)
-  fi
-  local prefix=(); command -v sudo >/dev/null 2>&1 && prefix=(sudo)
-  (
-    set +e
-    if $use_stream; then
-      "${stream_cmd[@]}" | "${prefix[@]}" "${dd_args[@]}" 2>&1 |
-      awk -v total="$total" '
-        /^[0-9]+ bytes/ {
-          cur=$1; pct=(total>0)?int(cur*100/total):0; if (pct>100)pct=100;
-          print "XXX"; print pct; printf("Writing (decompressing)... %s bytes\n", cur); print "XXX"; fflush();
-        }
-      END { print "XXX"; print 100; print "Finalizing..."; print "XXX"; fflush(); }'
-    else
-      "${prefix[@]}" "${dd_args[@]}" 2>&1 |
-      awk -v total="$total" '
-        /^[0-9]+ bytes/ {
-          cur=$1; pct=(total>0)?int(cur*100/total):0; if (pct>100)pct=100;
-          print "XXX"; print pct; printf("Writing... %s bytes\n", cur); print "XXX"; fflush();
-        }
-      END { print "XXX"; print 100; print "Finalizing..."; print "XXX"; fflush(); }'
-    fi
-    status=$?
-    echo "$status" >"$REPO_ROOT/.flash_status.tmp"
-  ) | dialog --title "Flashing to $dev" --gauge "Starting..." 12 "$DIALOG_WIDTH" 0
-  local status; status=$(cat "$REPO_ROOT/.flash_status.tmp" 2>/dev/null || echo 1)
-  rm -f "$REPO_ROOT/.flash_status.tmp"
-  sync || true
-  if [[ "$status" -eq 0 ]]; then
-    dialog --title "Success" --msgbox "Flash completed successfully." 7 40
-  else
-    dialog --title "Error" --msgbox "Flashing failed. Check permissions and device." 8 60
-    return 1
-  fi
+  done
 }
 
 # --- Ventoy support ---
+find_ventoy_partitions() {
+  local dev="$1"
+  lsblk -ln -b -o NAME,TYPE,SIZE,LABEL,FSTYPE "$dev" | awk '
+    $2 == "part" {
+      name=$1; size=$3; label=$4; fstype=$5;
+      if (label == "VTOYEFI" && fstype == "vfat") efi=name;
+      if (label != "VTOYEFI" && fstype != "vfat" && size > data_size) {
+        data=name; data_size=size;
+      }
+    }
+    END { if (data != "" && efi != "") print data, efi }
+  '
+}
+
+wait_for_ventoy_partitions() {
+  local dev="$1" attempt parts
+  for ((attempt=0; attempt<10; attempt++)); do
+    parts=$(find_ventoy_partitions "$dev")
+    [[ -n "$parts" ]] && { printf '%s\n' "$parts"; return 0; }
+    sleep 1
+  done
+  return 1
+}
+
+verify_ventoy_efi_bootloader() {
+  local efi_part="$1"
+  shift
+  local -a prefix=("$@")
+  local efi_mount mounted_here=0 verified=1
+
+  efi_mount=$(lsblk -no MOUNTPOINT "/dev/$efi_part" | head -1)
+  if [[ -z "$efi_mount" ]]; then
+    efi_mount=$(mktemp -d "${TMPDIR:-/tmp}/isoforge-ventoy-efi.XXXXXX") || return 1
+    if ! "${prefix[@]}" mount -o ro "/dev/$efi_part" "$efi_mount"; then
+      rmdir "$efi_mount" 2>/dev/null || true
+      return 1
+    fi
+    mounted_here=1
+  fi
+
+  if [[ ! -s "$efi_mount/EFI/BOOT/BOOTX64.EFI" && \
+        ! -s "$efi_mount/EFI/BOOT/BOOTIA32.EFI" && \
+        ! -s "$efi_mount/EFI/BOOT/BOOTAA64.EFI" ]]; then
+    verified=0
+  fi
+
+  if (( mounted_here )); then
+    "${prefix[@]}" umount "$efi_mount" || verified=0
+    rmdir "$efi_mount" 2>/dev/null || true
+  fi
+  return $((1 - verified))
+}
+
+cleanup_ventoy_data_mount() {
+  local mnt="$1"
+  shift
+  local -a prefix=("$@")
+  "${prefix[@]}" umount "$mnt" || return 1
+  rmdir "$mnt" 2>/dev/null || true
+}
+
+cleanup_owned_ventoy_mount() {
+  [[ -n "$VENTOY_OWNED_DATA_MOUNT" ]] || return 0
+  local mnt="$VENTOY_OWNED_DATA_MOUNT"
+  if (( EUID == 0 )); then
+    cleanup_ventoy_data_mount "$mnt" && VENTOY_OWNED_DATA_MOUNT=""
+  else
+    cleanup_ventoy_data_mount "$mnt" sudo && VENTOY_OWNED_DATA_MOUNT=""
+  fi
+}
+
+cleanup_isoforge_exit() {
+  # Keep the owned path for a later retry if unmount fails, but never let
+  # best-effort cleanup prevent restoring the terminal after dialog exits.
+  cleanup_owned_ventoy_mount || true
+  reset_tui
+}
+
 flash_with_ventoy() {
-  if [[ ${#SELECTED_IMAGES[@]} -lt 2 ]]; then return 1; fi
-  ensure_ventoy_available || return 1
+  if [[ ${#SELECTED_IMAGES[@]} -eq 0 ]]; then return 1; fi
+  validate_selected_images || return 1
   local dev="/dev/$SELECTED_DEVICE"
   local prefix=(); command -v sudo >/dev/null 2>&1 && prefix=(sudo)
   flash_confirm || return 1
-  (
-    set -e
-    "${prefix[@]}" bash "$VENTOY_BIN" -I -g "$dev"
-    echo $? >"$REPO_ROOT/.ventoy_status.tmp"
-  ) | dialog --title "Installing Ventoy" --gauge "Preparing device ..." 10 "$DIALOG_WIDTH" 0
-  local vstatus; vstatus=$(cat "$REPO_ROOT/.ventoy_status.tmp" 2>/dev/null || echo 1)
-  rm -f "$REPO_ROOT/.ventoy_status.tmp"
+
+  # Authenticate immediately after Isoforge's destructive-action confirmation,
+  # before any validation or Ventoy command touches the selected device.
+  if (( EUID != 0 )); then
+    sudo -v || {
+      dialog --title "Ventoy" --msgbox "Administrator authentication failed. Ventoy was not installed." 7 64
+      return 1
+    }
+  fi
+  ensure_ventoy_available || return 1
+  validate_ventoy_device "$dev" "${prefix[@]}" || return 1
+
+  # Ventoy owns a safety confirmation of its own. Run it in the terminal so
+  # its output and y/n prompt remain native and readable, rather than hiding
+  # them behind a dialog control or answering on the user's behalf. Do not
+  # force GPT: Ventoy's default MBR layout has wider legacy-firmware support.
+  dialog --title "Ventoy confirmation" --msgbox \
+    "Ventoy will now continue in the terminal and ask for its own confirmation.\n\nReview its device name carefully, answer there, then return here when it exits." 10 72
+  clear
+  printf 'Starting Ventoy for %s. Follow its terminal prompt.\n\n' "$dev"
+  local errexit_was_on=0
+  [[ $- == *e* ]] && errexit_was_on=1
+  set +e
+  "${prefix[@]}" bash "$VENTOY_BIN" -I "$dev"
+  local vstatus=$?
+  (( errexit_was_on )) && set -e
+  if { : </dev/tty; } 2>/dev/null; then
+    printf '\nVentoy exited with status %s. Press Enter to return to Isoforge. ' "$vstatus"
+    read -r _ </dev/tty || true
+  fi
   if [[ "$vstatus" -ne 0 ]]; then
-    dialog --title "Ventoy" --msgbox "Ventoy installation failed." 7 40
+    dialog --title "Ventoy" --msgbox "Ventoy installation failed (exit $vstatus). Review the installer output above." 8 72
     return 1
   fi
-  local part mnt
-  part=$(
-    lsblk -ln -b -o NAME,TYPE,SIZE,LABEL,FSTYPE "/dev/$SELECTED_DEVICE" | awk '
-      $2=="part" {
-        name=$1; size=$3; label=$4; fstype=$5;
-        if (label != "VTOYEFI" && fstype != "vfat" && size > best_size) {
-          best_size=size; best=name;
-        }
-        if (size > max_size) {
-          max_size=size; max=name;
-        }
-      }
-      END { if (best != "") print best; else print max }
-    '
-  )
-  if [[ -z "$part" ]]; then
-    dialog --title "Ventoy" --msgbox "Could not locate Ventoy data partition." 7 60
+
+  local part efi_part mnt mounted_here=0 result=0
+  read -r part efi_part < <(wait_for_ventoy_partitions "$dev")
+  if [[ -z "$part" || -z "$efi_part" ]]; then
+    dialog --title "Ventoy" --msgbox "Ventoy exited successfully, but its data and EFI partitions did not appear. No ISO files were copied." 8 72
     return 1
   fi
+  if ! verify_ventoy_efi_bootloader "$efi_part" "${prefix[@]}"; then
+    dialog --title "Ventoy" --msgbox "Ventoy's EFI fallback bootloader was not found. No ISO files were copied because the USB may not boot. Reinstall Ventoy and review its terminal output." 10 76
+    return 1
+  fi
+
   mnt=$(lsblk -no MOUNTPOINT "/dev/$part" | head -1)
   if [[ -z "$mnt" ]]; then
-    mnt="$REPO_ROOT/.mnt_ventoy"; mkdir -p "$mnt"
+    mnt=$(mktemp -d "${TMPDIR:-/tmp}/isoforge-ventoy-data.XXXXXX") || return 1
     if ! "${prefix[@]}" mount "/dev/$part" "$mnt"; then
-      dialog --title "Ventoy" --msgbox "Failed to mount /dev/$part. Ensure exFAT support is installed (exfatprogs/exfat-utils)." 9 70
+      rmdir "$mnt" 2>/dev/null || true
+      dialog --title "Ventoy" --msgbox "Failed to mount /dev/$part. Ensure exFAT support is installed (exfatprogs)." 9 70
       return 1
     fi
+    mounted_here=1
+    VENTOY_OWNED_DATA_MOUNT="$mnt"
   fi
+
   if [[ -n "$SELECTED_BACKGROUND" && -f "$SELECTED_BACKGROUND" ]]; then
-    apply_ventoy_background "$mnt" "$SELECTED_BACKGROUND" || return 1
+    apply_ventoy_background "$mnt" "$SELECTED_BACKGROUND" "${prefix[@]}" || result=1
   fi
-  if ! ensure_space_or_prune "$mnt"; then return 1; fi
-  copy_isos_to_ventoy "$mnt" || return 1
+  if (( result == 0 )) && ! ensure_space_or_prune "$mnt"; then result=1; fi
+  if (( result == 0 )) && ! copy_isos_to_ventoy "$mnt" "${prefix[@]}"; then result=1; fi
   sync || true
-  dialog --title "Success" --msgbox "Ventoy prepared and ISOs copied successfully." 7 60
+  if (( mounted_here )); then
+    if cleanup_ventoy_data_mount "$mnt" "${prefix[@]}"; then
+      VENTOY_OWNED_DATA_MOUNT=""
+    else
+      result=1
+    fi
+  fi
+  (( result == 0 )) || return 1
+  dialog --title "Success" --msgbox "Ventoy prepared, bootloader verified, and ISOs copied successfully." 7 72
+}
+
+# Retained for user-facing cache paths; executable discovery never uses it.
+ventoy_cache_dir() {
+  printf '%s\n' "${ISOFORGE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/isoforge}/ventoy"
+}
+
+ventoy_system_cache_dir() {
+  printf '%s\n' /var/cache/isoforge/ventoy
+}
+
+ventoy_download_file() {
+  local url="$1" destination="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL "$url" -o "$destination"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$destination" "$url"
+  else
+    return 1
+  fi
 }
 
 ensure_ventoy_available() {
   VENTOY_BIN=""
-  local cand
+  local cand root_cache api tag ver url tmpdir outdir
+  local -a elevate=()
+  if (( EUID != 0 )); then
+    if ! command -v sudo >/dev/null 2>&1; then
+      dialog --title "Ventoy" --msgbox "Administrator privileges are required to install Ventoy." 7 64
+      return 1
+    fi
+    elevate=(sudo)
+  fi
+  root_cache=$(ventoy_system_cache_dir)
+  # Never execute a Ventoy installer from a user-writable cache: this script
+  # subsequently runs with administrator privileges.
   for cand in "$REPO_ROOT/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/tools/ventoy/Ventoy2Disk.sh" "$REPO_ROOT/Ventoy2Disk.sh"; do
     [[ -x "$cand" ]] && VENTOY_BIN="$cand" && break
   done
@@ -735,78 +965,77 @@ ensure_ventoy_available() {
     VENTOY_BIN=$(command -v Ventoy2Disk.sh)
   fi
   if [[ -z "$VENTOY_BIN" ]]; then
-    # Try to install via system package manager first
     if command -v apt-get >/dev/null 2>&1; then
       print_info "Installing ventoy via apt-get ..."
-      if sudo apt-get update && sudo apt-get install -y ventoy; then
-        if command -v Ventoy2Disk.sh >/dev/null 2>&1; then VENTOY_BIN=$(command -v Ventoy2Disk.sh); fi
-      fi
+      "${elevate[@]}" apt-get update && "${elevate[@]}" apt-get install -y ventoy || true
     elif command -v dnf >/dev/null 2>&1; then
       print_info "Installing ventoy via dnf ..."
-      sudo dnf install -y ventoy || true
-      if command -v Ventoy2Disk.sh >/dev/null 2>&1; then VENTOY_BIN=$(command -v Ventoy2Disk.sh); fi
+      "${elevate[@]}" dnf install -y ventoy || true
     elif command -v pacman >/dev/null 2>&1; then
       print_info "Installing ventoy via pacman ..."
-      sudo pacman -S --noconfirm ventoy || true
-      if command -v Ventoy2Disk.sh >/dev/null 2>&1; then VENTOY_BIN=$(command -v Ventoy2Disk.sh); fi
+      "${elevate[@]}" pacman -S --noconfirm ventoy || true
     fi
+    command -v Ventoy2Disk.sh >/dev/null 2>&1 && VENTOY_BIN=$(command -v Ventoy2Disk.sh)
   fi
   if [[ -z "$VENTOY_BIN" ]]; then
-    # Download latest Ventoy release from GitHub
     print_info "Downloading Ventoy (latest) ..."
-    local api="https://api.github.com/repos/ventoy/Ventoy/releases/latest"
-    local tag ver url tmpdir tarball outdir
-    tmpdir="$(mktemp -d)"
-    if curl -fsSL "$api" -o "$tmpdir/latest.json"; then
+    api="https://api.github.com/repos/ventoy/Ventoy/releases/latest"
+    tmpdir=$(mktemp -d) || return 1
+    if ventoy_download_file "$api" "$tmpdir/latest.json"; then
       tag=$(jq -r .tag_name "$tmpdir/latest.json" 2>/dev/null || echo "")
       ver="${tag#v}"
       if [[ -n "$ver" ]]; then
         url="https://github.com/ventoy/Ventoy/releases/download/${tag}/ventoy-${ver}-linux.tar.gz"
-        mkdir -p "$REPO_ROOT/ventoy"
-        if curl -fL "$url" -o "$tmpdir/ventoy.tgz"; then
-          tar -xzf "$tmpdir/ventoy.tgz" -C "$REPO_ROOT/ventoy" || true
-          outdir=$(find "$REPO_ROOT/ventoy" -maxdepth 1 -type d -name "ventoy-*" | head -1)
-          if [[ -x "$outdir/Ventoy2Disk.sh" ]]; then
-            VENTOY_BIN="$outdir/Ventoy2Disk.sh"
-          fi
+        # The archive is extracted only into a root-owned cache after sudo
+        # authentication, so a user-writable cache cannot be elevated later.
+        if ventoy_download_file "$url" "$tmpdir/ventoy.tgz" && \
+           "${elevate[@]}" install -d -o root -g root -m 755 "$root_cache" && \
+           "${elevate[@]}" rm -rf "$root_cache/ventoy-$ver" && \
+           "${elevate[@]}" tar --no-same-owner --no-same-permissions -xzf "$tmpdir/ventoy.tgz" -C "$root_cache"; then
+          outdir="$root_cache/ventoy-$ver"
+          [[ -x "$outdir/Ventoy2Disk.sh" ]] && VENTOY_BIN="$outdir/Ventoy2Disk.sh"
         fi
       fi
     fi
     rm -rf "$tmpdir"
   fi
   if [[ -z "$VENTOY_BIN" ]]; then
-    dialog --title "Ventoy not found" --msgbox "Could not locate or auto-install Ventoy.\nPlease install Ventoy and ensure Ventoy2Disk.sh is available.\nRef: https://www.ventoy.net/en/download.html" 11 70
+    dialog --title "Ventoy not found" --msgbox "Could not locate or install Ventoy. Ensure curl or wget is installed, then retry.\n\nRef: https://www.ventoy.net/en/download.html" 11 70
     return 1
   fi
   return 0
 }
 
 apply_ventoy_background() {
-  local mnt="$1"; shift
-  local img="$1"
+  local mnt="$1" img="$2"
+  shift 2
+  local -a prefix=("$@")
   local vdir="$mnt/ventoy/theme/default"
-  mkdir -p "$vdir"
   local ext="${img##*.}"; ext="${ext,,}"
   case "$ext" in
     jpg|jpeg|png|tga) :;;
     *) dialog --title "Background" --msgbox "Unsupported image format: .$ext. Use jpg/png/tga." 8 60; return 1;;
   esac
   local bg="$vdir/background.$ext"
-  cp -f "$img" "$bg"
-  cat >"$vdir/theme.txt" <<EOF
-desktop-image: "background.$ext"
-title-text: "Ventoy"
-EOF
-  mkdir -p "$mnt/ventoy"
-  cat >"$mnt/ventoy/ventoy.json" <<EOF
-{
-  "theme": {
-    "file": "/ventoy/theme/default/theme.txt",
-    "gfxmode": "auto",
-    "display_mode": "GUI"
-  }
-}
-EOF
+  local menu_assets="$REPO_ROOT/assets/ventoy/ventoy-menu"
+
+  # The Ventoy data partition is normally mounted by sudo and therefore owned
+  # by root. Keep every write on that mounted filesystem on the same privilege
+  # path; shell redirections are replaced with tee so they are elevated too.
+  "${prefix[@]}" mkdir -p "$vdir" || return 1
+  "${prefix[@]}" cp -f "$img" "$bg" || return 1
+  # Use Ventoy's own GUI assets so the selected row and scrollbar remain
+  # visible over every supplied background and long ISO lists can be scrolled.
+  "${prefix[@]}" cp -f "$menu_assets"/menu_*.png "$menu_assets"/select_c.png \
+    "$menu_assets"/slider_*.png "$vdir/" || return 1
+  # Reserve the top for the bundled logo and the bottom for Ventoy status.
+  # The explicit menu box is deliberately wider and taller than the artwork's
+  # central guide area because a real Ventoy menu can contain many ISO names.
+  printf 'desktop-image: "background.%s"\ntitle-text: "Ventoy"\n+ boot_menu {\n  left = 14%%\n  top = 32%%\n  width = 72%%\n  height = 56%%\n  item_font = "Unifont Regular 16"\n  selected_item_font = "Unifont Regular 16"\n  menu_pixmap_style = "menu_*.png"\n  item_color = "#e5e7eb"\n  selected_item_color = "#ffffff"\n  selected_item_pixmap_style = "select_*.png"\n  item_height = 36\n  item_spacing = 8\n  item_padding = 1\n  scrollbar = true\n  scrollbar_width = 10\n  scrollbar_thumb = "slider_*.png"\n}\n' "$ext" | \
+    "${prefix[@]}" tee "$vdir/theme.txt" >/dev/null || return 1
+  "${prefix[@]}" mkdir -p "$mnt/ventoy" || return 1
+  printf '%s\n' '{' '  "theme": {' '    "file": "/ventoy/theme/default/theme.txt",' '    "gfxmode": "max",' '    "display_mode": "GUI",' '    "ventoy_left": "3%",' '    "ventoy_top": "93%",' '    "ventoy_color": "#94a3b8"' '  }' '}' | \
+    "${prefix[@]}" tee "$mnt/ventoy/ventoy.json" >/dev/null || return 1
 }
 
 ensure_space_or_prune() {
@@ -821,9 +1050,15 @@ ensure_space_or_prune() {
   if (( total <= avail )); then return 0; fi
   local items=()
   for f in "${SELECTED_IMAGES[@]}"; do items+=("$f" "$(basename "$f")" on); done
-  local sel; sel=$(dialog --stdout --title "Insufficient space" --checklist "Available: $((avail/1024/1024)) MiB\nRequired: $((total/1024/1024)) MiB\nDeselect some ISOs:" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}") || return 1
-  sel=$(sed 's/\"//g' <<<"$sel")
-  local new=(); for f in $sel; do new+=("$f"); done
+  local selection_file
+  selection_file=$(mktemp) || return 1
+  if ! dialog --stdout --separate-output --title "Insufficient space" --checklist "Available: $((avail/1024/1024)) MiB\nRequired: $((total/1024/1024)) MiB\nDeselect some ISOs:" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}" >"$selection_file"; then
+    rm -f "$selection_file"
+    return 1
+  fi
+  local -a new=()
+  mapfile -t new <"$selection_file"
+  rm -f "$selection_file"
   [[ ${#new[@]} -eq 0 ]] && return 1
   SELECTED_IMAGES=("${new[@]}")
   # recheck
@@ -831,70 +1066,150 @@ ensure_space_or_prune() {
   (( total <= avail )) || ensure_space_or_prune "$mnt"
 }
 
+# Ventoy receives an actual ISO or raw image, never a compressed catalog
+# archive. Keep the downloaded archive intact, then reuse an existing unpacked
+# sibling or create it atomically beside the source file.
+normalize_ventoy_image() {
+  local source="$1" source_lower output tool tmp
+  source_lower=${source,,}
+  case "$source_lower" in
+    *.xz)  output="${source:0:${#source}-3}"; tool=xz ;;
+    *.gz)  output="${source:0:${#source}-3}"; tool=gzip ;;
+    *.bz2) output="${source:0:${#source}-4}"; tool=bzip2 ;;
+    *) printf '%s\n' "$source"; return 0 ;;
+  esac
+  command -v "$tool" >/dev/null 2>&1 || return 1
+  # The archive is authoritative. Rebuild an absent, empty, or older sibling.
+  if [[ ! -s "$output" || "$source" -nt "$output" ]]; then
+    tmp=$(mktemp "${output}.partial.XXXXXX") || return 1
+    if ! "$tool" -dc -- "$source" >"$tmp"; then
+      rm -f "$tmp"
+      return 1
+    fi
+    mv -f "$tmp" "$output"
+  fi
+  [[ -s "$output" ]] || return 1
+  printf '%s\n' "$output"
+}
+
 copy_isos_to_ventoy() {
-  local mnt="$1"; shift
+  local mnt="$1"
+  shift
+  local -a prefix=("$@")
   local f
   for f in "${SELECTED_IMAGES[@]}"; do
     local base; base=$(basename "$f")
     if command -v rsync >/dev/null 2>&1; then
-      rsync -h --progress "$f" "$mnt/$base" || return 1
+      "${prefix[@]}" rsync -h --progress "$f" "$mnt/$base" || return 1
     else
-      cp -v "$f" "$mnt/$base" || return 1
+      "${prefix[@]}" cp -v "$f" "$mnt/$base" || return 1
     fi
   done
 }
 
-select_background_image() {
-  dialog_init
-  local start_dir="${DOWNLOAD_DIR:-$HOME}"
-  local img
-  img=$(dialog --stdout --title "Select Background Image (jpg/png/tga)" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
-  [[ -z "$img" ]] && return 1
-  local lower="${img,,}"
-  if [[ "$lower" != *.jpg && "$lower" != *.jpeg && "$lower" != *.png && "$lower" != *.tga ]]; then
-    dialog --title "Invalid file" --msgbox "Select a jpg/png/tga image." 7 40
-    return 1
-  fi
-  SELECTED_BACKGROUND="$img"
-  ensure_image_view_available
-  local viewer=""
-  for viewer in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
-    [[ -x "$viewer" ]] && break || viewer=""
+image_view_cache_dir() {
+  printf '%s\n' "${ISOFORGE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/isoforge}/image-view"
+}
+
+preview_background_image() {
+  local img="$1" viewer="" cache_dir
+  cache_dir=$(image_view_cache_dir)
+  for viewer in "$(command -v image-view 2>/dev/null || true)" \
+    "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view" \
+    "$cache_dir/image-view"; do
+    [[ -n "$viewer" && -x "$viewer" ]] && break
+    viewer=""
   done
-  if [[ -n "$viewer" ]]; then
-    # Launch external viewer; user closes it normally (e.g., window close or ESC if supported)
-    "$viewer" "$SELECTED_BACKGROUND" || true
+
+  if [[ -z "$viewer" ]]; then
+    ensure_image_view_available
+    for viewer in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view" \
+      "$cache_dir/image-view"; do
+      [[ -x "$viewer" ]] && break || viewer=""
+    done
+  fi
+
+  if [[ -n "$viewer" ]] && { : </dev/tty; } 2>/dev/null; then
+    dialog --title "Background preview" --msgbox \
+      "The preview will open in the terminal now.\n\nUse Left/Right to browse nearby images and q when you are ready to return here." 10 72
+    clear
+    # Gallery mode deliberately stays open until q; the single-image command
+    # renders once then exits, allowing dialog to erase the preview immediately.
+    "$viewer" -g "$img" </dev/tty >/dev/tty 2>/dev/tty || return 1
     return 0
   fi
 
   if command -v chafa >/dev/null 2>&1; then
-    # Render preview in the terminal and keep it open in less until user presses 'q' to quit.
-    # This provides a simple "press q to close" interaction.
-    local err_file; err_file="$(mktemp)"
+    local err_file chafa_rc emsg
+    err_file="$(mktemp)"
     set +e
-    chafa "$SELECTED_BACKGROUND" 2>"$err_file" | less -R
-    local chafa_rc=${PIPESTATUS[0]}
+    chafa "$img" 2>"$err_file" | less -R
+    chafa_rc=${PIPESTATUS[0]}
     set -e
     if [[ $chafa_rc -ne 0 ]]; then
-      local emsg; emsg=$(cat "$err_file")
+      emsg=$(cat "$err_file")
       rm -f "$err_file"
-      dialog --title "chafa error" --msgbox "Failed to preview image with 'chafa'.\n\nError:\n${emsg}" 12 70
+      dialog --title "chafa error" --msgbox "Failed to preview image with chafa.\n\nError:\n${emsg}" 12 70
       return 1
     fi
     rm -f "$err_file"
     return 0
   fi
 
-  print_warning "No preview tool available (image-view/chafa). Skipping preview."
+  dialog --title "Preview unavailable" --msgbox \
+    "image-view and chafa are unavailable, so this image cannot be previewed here." 8 72
+  return 1
+}
+
+select_background_image() {
+  dialog_init
+  local start_dir="${DOWNLOAD_DIR:-$HOME}"
+  local bundled_dir="$REPO_ROOT/assets/ventoy"
+  local choice img lower
+
+  while true; do
+    choice=$(dialog --stdout --title "Select Ventoy Background" --menu \
+      "IsoForge is the default. Choose another background to replace it." "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
+      isoforge "IsoForge — dark forge (default)" \
+      nikos "NikOS — dark slate" \
+      custom "Choose a jpg/png/tga file") || return 1
+    case "$choice" in
+      isoforge) img="$bundled_dir/isoforge-background.png" ;;
+      nikos)    img="$bundled_dir/nikos-background.png" ;;
+      custom)
+        img=$(dialog --stdout --title "Select Background Image (jpg/png/tga)" --fselect "$start_dir/" "$DIALOG_HEIGHT" "$DIALOG_WIDTH") || return 1
+        ;;
+      *) return 1 ;;
+    esac
+    if [[ ! -f "$img" ]]; then
+      dialog --title "Background unavailable" --msgbox "Background file not found:\n$img" 8 72
+      continue
+    fi
+    lower="${img,,}"
+    if [[ "$lower" != *.jpg && "$lower" != *.jpeg && "$lower" != *.png && "$lower" != *.tga ]]; then
+      dialog --title "Invalid file" --msgbox "Select a jpg/png/tga image." 7 40
+      continue
+    fi
+
+    preview_background_image "$img" || return 1
+    if dialog --title "Use this background?" --yesno \
+      "Use this Ventoy background?\n\n$(basename -- "$img")" 8 72; then
+      SELECTED_BACKGROUND="$img"
+      return 0
+    fi
+    dialog --title "Choose another?" --yesno \
+      "Would you like to preview another background?" 7 60 || return 1
+  done
 }
 
 # Ensure an image-view binary is available; try to download a release asset for current OS/arch
 ensure_image_view_available() {
-  local bin
-  for bin in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view"; do
+  local bin cache_dir
+  cache_dir=$(image_view_cache_dir)
+  for bin in "$REPO_ROOT/image-view/image-view" "$REPO_ROOT/image-view/bin/image-view" "$cache_dir/image-view"; do
     [[ -x "$bin" ]] && return 0
   done
-  mkdir -p "$REPO_ROOT/image-view"
+  mkdir -p "$cache_dir" || return 1
   # Detect OS/arch (linux only)
   local os="linux" arch
   arch=$(uname -m | tr '[:upper:]' '[:lower:]')
@@ -918,17 +1233,17 @@ ensure_image_view_available() {
           local found
           found=$(find "$tmpdir/extract" -type f -perm -111 -iname 'image-view*' | head -1)
           if [[ -n "$found" ]]; then
-            cp "$found" "$REPO_ROOT/image-view/image-view" && chmod +x "$REPO_ROOT/image-view/image-view"
+            cp "$found" "$cache_dir/image-view" && chmod +x "$cache_dir/image-view"
           fi
         elif [[ "$name" =~ \.zip$ ]]; then
           command -v unzip >/dev/null 2>&1 && unzip -o "$dest" -d "$tmpdir/extract" || true
           local found
           found=$(find "$tmpdir/extract" -type f -perm -111 -iname 'image-view*' | head -1)
           if [[ -n "$found" ]]; then
-            cp "$found" "$REPO_ROOT/image-view/image-view" && chmod +x "$REPO_ROOT/image-view/image-view"
+            cp "$found" "$cache_dir/image-view" && chmod +x "$cache_dir/image-view"
           fi
         else
-          cp "$dest" "$REPO_ROOT/image-view/image-view" && chmod +x "$REPO_ROOT/image-view/image-view"
+          cp "$dest" "$cache_dir/image-view" && chmod +x "$cache_dir/image-view"
         fi
       fi
     fi
@@ -936,25 +1251,167 @@ ensure_image_view_available() {
   rm -rf "$tmpdir"
 }
 
+# The builder loads foo.yml, then deep-merges foo.local.yml over it
+# (inc/forge/recipe.sh recipe_load, documented in docs/BUILD.md). The ISO
+# Creator has to read a recipe the same way, or it decides compatibility and
+# names an output file from a recipe the build will not use.
+iso_creator_recipe_json() {
+  python3 - "$1" <<'PYTHON'
+import json
+import os
+import sys
+
+import yaml
+
+
+def load(path):
+    with open(path, encoding="utf-8") as stream:
+        return yaml.safe_load(stream) or {}
+
+
+def merge(base, overlay):
+    # jq's `*` on two objects merges recursively; anything else the right
+    # side replaces outright.
+    if isinstance(base, dict) and isinstance(overlay, dict):
+        out = dict(base)
+        for key, value in overlay.items():
+            out[key] = merge(out[key], value) if key in out else value
+        return out
+    return overlay
+
+
+path = sys.argv[1]
+recipe = load(path)
+stem, ext = os.path.splitext(path)
+local = f"{stem}.local{ext}" if ext in (".yml", ".yaml") else path + ".local"
+if os.path.isfile(local):
+    recipe = merge(recipe, load(local))
+json.dump(recipe, sys.stdout)
+PYTHON
+}
+
+iso_creator_base_matches_recipe() {
+  local recipe="$1" base_name="$2" pattern has_patterns=0
+  # Keep this matcher aligned with forge's Bash matcher: recipe patterns are
+  # POSIX extended regular expressions, not Python regular expressions.
+  while IFS= read -r pattern; do
+    has_patterns=1
+    if printf '%s\n' "$base_name" | grep -Eq -- "$pattern"; then
+      return 0
+    fi
+  done < <(iso_creator_recipe_json "$recipe" | jq -r '(.compatibility.base_filename_patterns // [])[]')
+  (( has_patterns == 0 ))
+}
+
+select_iso_creator_base() {
+  local recipe="$1"
+  dialog_init
+  load_config
+  create_directory "$DOWNLOAD_DIR" >/dev/null || true
+
+  local -a files=() items=()
+  mapfile -t files < <(find "$DOWNLOAD_DIR" -maxdepth 1 -type f -iname '*.iso' -print | sort)
+  if [[ ${#files[@]} -eq 0 ]]; then
+    dialog --title "ISO Creator" --msgbox \
+      "No local ISO files found in $DOWNLOAD_DIR. Download a base ISO first." 9 72
+    return 1
+  fi
+
+  local file
+  for file in "${files[@]}"; do
+    if iso_creator_base_matches_recipe "$recipe" "$(basename -- "$file")"; then
+      items+=("$file" "$(basename -- "$file")")
+    fi
+  done
+  if [[ ${#items[@]} -eq 0 ]]; then
+    dialog --title "ISO Creator" --msgbox \
+      "No local ISO in $DOWNLOAD_DIR is compatible with $(basename -- "$recipe"). Download the recipe's supported base ISO first." 9 76
+    return 1
+  fi
+  dialog --stdout --title "ISO Creator — Base ISO" --menu \
+    "Choose a local ISO compatible with $(basename -- "$recipe")" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}"
+}
+select_iso_creator_recipe() {
+  dialog_init
+  local -a recipes=() items=()
+  # *.local.yml is an override layer, not a recipe on its own: it holds only
+  # the changed keys, so offering it here would fail validation in the builder.
+  mapfile -t recipes < <(find "$REPO_ROOT/recipes" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
+    ! -name '*.local.yml' ! -name '*.local.yaml' -print | sort)
+  if [[ ${#recipes[@]} -eq 0 ]]; then
+    dialog --title "ISO Creator" --msgbox "No recipe files found in $REPO_ROOT/recipes." 8 70
+    return 1
+  fi
+
+  local recipe
+  for recipe in "${recipes[@]}"; do
+    items+=("$recipe" "$(basename -- "$recipe")")
+  done
+  dialog --stdout --title "ISO Creator — Recipe" --menu \
+    "Choose the customization recipe" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 "${items[@]}"
+}
+
+iso_creator_output_path() {
+  local recipe="$1" output_name
+  output_name=$(iso_creator_recipe_json "$recipe" 2>/dev/null | jq -r '.output.name // empty') || return 1
+  [[ -n "$output_name" ]] || return 1
+  printf '%s/%s.iso\n' "$DOWNLOAD_DIR" "$output_name"
+}
+
+create_iso() {
+  local base_iso recipe created_iso
+  recipe=$(select_iso_creator_recipe) || return 1
+  base_iso=$(select_iso_creator_base "$recipe") || return 1
+  if ! iso_creator_base_matches_recipe "$recipe" "$(basename -- "$base_iso")"; then
+    dialog --title "ISO Creator" --msgbox "The selected base ISO is not compatible with $(basename -- "$recipe")." 8 72
+    return 1
+  fi
+  created_iso=$(iso_creator_output_path "$recipe") || created_iso="$DOWNLOAD_DIR"
+
+  dialog --title "Create ISO" --yesno \
+    "Base ISO:\n  $(basename -- "$base_iso")\n\nRecipe:\n  $(basename -- "$recipe")\n\nThe builder creates a new ISO in $DOWNLOAD_DIR and requires administrator privileges. Continue?" \
+    14 76 || return 1
+
+  clear
+  local rc
+  if (( EUID == 0 )); then
+    if "$REPO_ROOT/inc/forge.sh" --recipe "$recipe" --base-iso "$base_iso" --config "$CONFIG_FILE" --output "$DOWNLOAD_DIR"; then rc=0; else rc=$?; fi
+  else
+    if sudo "$REPO_ROOT/inc/forge.sh" --recipe "$recipe" --base-iso "$base_iso" --config "$CONFIG_FILE" --output "$DOWNLOAD_DIR"; then rc=0; else rc=$?; fi
+  fi
+
+  if (( rc == 0 )); then
+    dialog --title "ISO Creator" --msgbox "New ISO created:\n$created_iso" 8 72
+  else
+    dialog --title "ISO Creator" --msgbox "ISO creation failed (exit $rc). Review the terminal output above for details." 9 72
+  fi
+  return "$rc"
+}
+
 main_menu() {
   # Attempt to install missing dependencies (dialog, jq, curl/wget, util-linux, coreutils)
   ensure_deps
   ensure_dialog
+  # Load this in the parent shell. ISO selection uses command substitution, so
+  # loading it inside a selector would discard DOWNLOAD_DIR with the subshell.
+  load_config
   while true; do
     dialog_init
     local summary; summary=$(show_summary)
     local choice
     choice=$(dialog --stdout --title "$(title)" \
       --menu "${summary}\n\nChoose an action:" "$DIALOG_HEIGHT" "$DIALOG_WIDTH" 0 \
-      image  "Select Image(s)" \
+      image  "Select ISO files" \
+      create "ISO Creator (base ISO + recipe)" \
       bg     "Select Ventoy Background" \
       drive  "Select Drive" \
-      flash  "Flash! (dd for single, Ventoy for multi)" \
+      flash  "Prepare Ventoy USB" \
       quit   "Quit") || break
 
     case "$choice" in
-      image) if ! run_main_menu_action select_image_source; then :; fi ;;
-      bg)    if ! run_main_menu_action select_background_image; then :; fi ;;
+      image)  if ! run_main_menu_action select_image_source; then :; fi ;;
+      create) if ! create_iso; then :; fi ;;
+      bg)     if ! run_main_menu_action select_background_image; then :; fi ;;
       drive) if ! run_main_menu_action select_drive; then :; fi ;;
       flash) if ! run_main_menu_action flash_image; then :; fi ;;
       quit)  break               ;;
@@ -966,7 +1423,7 @@ main_menu() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   parse_cli_args "$@"
   if [[ "${ISOFORGE_DISABLE_EXIT_TRAP:-0}" != "1" ]]; then
-    trap reset_tui EXIT INT TERM
+    trap cleanup_isoforge_exit EXIT INT TERM
   fi
   main_menu
 fi

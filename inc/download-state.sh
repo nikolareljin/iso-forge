@@ -110,6 +110,41 @@ derive_download_output_name() {
   printf '%s\n' "$output"
 }
 
+is_browser_url() {
+  [[ "${1:-}" == https://* ]]
+}
+
+open_browser_url() {
+  local url="$1"
+  local opener
+
+  is_browser_url "$url" || return 1
+  for opener in xdg-open gio open; do
+    command -v "$opener" >/dev/null 2>&1 || continue
+    if [[ "$opener" == gio ]]; then
+      gio open "$url" >/dev/null 2>&1 && return 0
+    else
+      "$opener" "$url" >/dev/null 2>&1 && return 0
+    fi
+  done
+  return 1
+}
+
+format_download_mib() {
+  local bytes="${1:-0}"
+  awk -v bytes="$bytes" 'BEGIN { printf "%.1f MiB", bytes / 1024 / 1024 }'
+}
+
+download_content_length() {
+  local url="$1"
+
+  if declare -F _dialog__fetch_content_length >/dev/null 2>&1; then
+    _dialog__fetch_content_length "$url"
+  else
+    printf '0\n'
+  fi
+}
+
 download_file_with_error_tracking() {
   local url="$1"
   local output="${2:-}"
@@ -180,6 +215,13 @@ download_file_with_error_tracking() {
     cmd=(wget -nv -O "$tmpfile" -- "$url")
   fi
 
+  # A Content-Length header lets the gauge report actual progress. Some
+  # mirrors and redirects do not provide one; those downloads remain at 0%
+  # until completion instead of showing a misleading animated percentage.
+  local total_bytes
+  total_bytes=$(download_content_length "$url")
+  [[ "$total_bytes" =~ ^[0-9]+$ ]] || total_bytes=0
+
   "${cmd[@]}" >"$log_file" 2>&1 &
   local pid=$!
 
@@ -194,16 +236,27 @@ download_file_with_error_tracking() {
       set +e
     fi
     (
-      local percent=0 cur_bytes
+      local percent=0 cur_bytes downloaded_mib total_mib
       while kill -0 "$pid" >/dev/null 2>&1; do
         cur_bytes=0
         if [[ -f "$tmpfile" ]]; then
           cur_bytes=$(wc -c <"$tmpfile" 2>/dev/null || echo 0)
         fi
-        percent=$(( (percent + 3) % 100 ))
+        downloaded_mib=$(format_download_mib "$cur_bytes")
+        if (( total_bytes > 0 )); then
+          percent=$(( cur_bytes * 100 / total_bytes ))
+          (( percent > 99 )) && percent=99
+          total_mib=$(format_download_mib "$total_bytes")
+        else
+          percent=0
+        fi
         printf 'XXX\n%d\n' "$percent" || break
         printf 'Downloading: %s\n' "$(basename -- "$output")" || break
-        printf 'Downloaded: %s bytes\n' "$cur_bytes" || break
+        if (( total_bytes > 0 )); then
+          printf 'Progress: %d%% (%s / %s)\n' "$percent" "$downloaded_mib" "$total_mib" || break
+        else
+          printf 'Downloaded: %s (total size unavailable)\n' "$downloaded_mib" || break
+        fi
         printf 'XXX\n' || break
         sleep 1
       done

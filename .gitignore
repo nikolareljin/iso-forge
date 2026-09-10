@@ -3,7 +3,12 @@
 .tmp_config.json
 .mockbin/
 test_downloads/
+# Locally downloaded or user-built terminal image preview binary.
+image-view/
 ventoy/
+!assets/
+!assets/ventoy/
+!assets/ventoy/**
 dist/
 
 # Packaging artifacts

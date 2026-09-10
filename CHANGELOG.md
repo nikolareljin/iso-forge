@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning when applicable.
 
+## 2026-09-10 — 2.2.0
+
+### Added
+- **Ventoy-first USB preparation.** The interactive workflow installs Ventoy on the selected removable drive, copies one or more chosen ISO files, checks available capacity, and can apply bundled IsoForge or NikOS backgrounds or a user-selected image. Ventoy's own confirmation remains in the terminal so its interactive prompt works reliably.
+- **ISO Creator.** `isoforge build` and the ISO Creator menu action turn a supported Ubuntu or Xubuntu base image plus a recipe into a new installable ISO. The completed image is written to the configured download directory, ready for the same Ventoy USB workflow.
+- **NikOS post-install image recipe.** The Xubuntu-based NikOS image deliberately retains the stock Xubuntu installer and adds an Install NikOS launcher. NikOS choices are made after the base system is installed, rather than being baked into the base ISO.
+- **Expanded curated catalog.** Ubuntu Server 24.04.4 and 26.04.1 for AMD64 and ARM64 join Ubuntu/Xubuntu 26.04.1, Proxmox VE, OpenMediaVault, OPNsense and TrueNAS Community entries.
+- **Authenticated source handoff.** Catalog entries with `browser_url` open the vendor's HTTPS page instead of attempting a transfer that requires a login. pfSense uses this flow.
+
+### Changed
+- Download progress now presents transferred and total sizes in MiB and calculates the percentage from byte counts.
+- Background previews use image-view gallery mode and stay open until the user exits them, followed by an explicit use-or-choose-another prompt.
+
+### Fixed
+- Setup uses `exfatprogs` instead of the obsolete `exfat-utils` package on current Debian and Ubuntu releases.
+- Dependency installation and download failures remain visible with actionable status rather than appearing stalled.
+- Ventoy preparation requests elevated privileges before device access, keeps its native confirmation prompt in the terminal, uses its default MBR-compatible layout, verifies the EFI fallback bootloader, and removes IsoForge-owned temporary mounts.
+- The generated man page now matches the Ventoy-first CLI description.
+- `burn` starts without `--config` again. The compatibility entrypoint expanded `CONFIG_FILE` before its default was assigned, and the assignment sat below the `exec` where nothing can reach it, so under `set -u` a bare `./burn` died on an unbound variable instead of opening the Ventoy UI.
+- A browser-only catalog entry is no longer offered as a builder base. `forge_catalog_url` read `.url` with `jq -r`, which prints the literal string `null` for an entry that carries only `browser_url` — not empty, so the id resolved, `--dry-run` called the recipe valid, and the build then tried to download a file called `null`.
+- Downloading a browser-only selection no longer claims files were saved. A successful handoff left the error count at zero and fell through to `Download completed! Files saved to …`, naming a directory that gained nothing. Handoffs and downloads are counted separately and the message says which happened.
+- The ISO Creator reads a recipe the way the builder does. Its compatibility matcher and its output-name lookup each parsed only the base YAML, while `recipe_load` deep-merges an adjacent `foo.local.yml` first — so a local override could hide a valid base, offer one the build rejects, or make the success dialog name a file that was never written. Both now read the same merged recipe, and `*.local.yml` no longer appears in the recipe menu, where selecting it alone would fail validation.
+- `--dry-run` now refuses a base the build would refuse. It checked `compatibility.base_filename_patterns` only against a `--base-iso` override, so a recipe whose configured `catalog_id`, `base.url` or `base.iso` its own patterns forbid reported "Recipe is valid" and then failed the real build. Both branches now run the same check the build runs, and that check ignores a URL query string, as `forge_resolve_base` already did when naming the cached file — otherwise a supported `…iso?download=1` was refused by the dry-run and accepted by the build.
+
 ## 2026-09-03 — 2.1.3
 
 ### Fixed

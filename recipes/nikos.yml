@@ -1,66 +1,28 @@
-# NikOS as an installable image.
+# NikOS post-install launcher for Xubuntu 24.04.
 #
-# NikOS is normally applied to a machine that is already running: its installer
-# clones the playbook and runs it against the live desktop. This recipe runs the
-# same playbook inside the image instead, so the result is an ISO that installs
-# an already-provisioned system.
+# This image remains a stock Xubuntu installation image. It deliberately does
+# not run NikOS, Ansible, or package installation while the ISO is being built.
+# After Xubuntu is installed and rebooted, "Install NikOS" starts the native
+# NikOS installer, which asks the user to select optional bundles and writes
+# the resulting configuration on the installed machine.
 #
-#   sudo ./forge --recipe recipes/nikos.yml
-#
-# The build takes 30 to 60 minutes and needs about 25 GB of scratch space.
-# .github/workflows/nikos-iso.yml runs exactly this recipe end to end.
-recipe: nikos-desktop
+# Build against an already-downloaded base image:
+#   sudo ./forge --recipe recipes/nikos.yml \
+#     --base-iso "$HOME/Downloads/iso_images/xubuntu-24.04.4-desktop-amd64.iso"
+recipe: nikos-postinstall-xubuntu
 
 base:
   catalog_id: Xubuntu_24_04_4_desktop_amd64
 
+compatibility:
+  base_filename_patterns:
+    - '^xubuntu-24\.04\.[0-9]+-desktop-amd64\.iso$'
+
 output:
-  name: nikos-24.04-amd64
-  volume_id: NIKOS_2404
-  label: NikOS 24.04
+  name: nikos-xubuntu-24.04-amd64
+  volume_id: NIKOS_XUBUNTU_2404
+  label: NikOS installer for Xubuntu 24.04
 
-packages:
-  install:
-    - git
-    - curl
-    - ca-certificates
-
-ansible:
-  repo: https://github.com/nikolareljin/nikos
-  # An immutable tag, not a branch: what a recipe pins decides what ends up in
-  # the image, so it has to name something that cannot change underneath it.
-  # 0.6.3 carries the fix for nvm installing Node outside NVM_DIR and for GRUB
-  # theming failing where no bootloader is installed yet, without either of
-  # which this build cannot complete.
-  ref: "0.6.3"
-  playbook: site.yml
-  inventory: inventory/local
-  # site.yml takes nikos_home and nikos_user from the controller's environment,
-  # which in a chroot is root. Pointing the per-user half at /etc/skel means
-  # every account the installer creates inherits the NikOS desktop.
-  skel_home: /etc/skel
-  # Only roles that carry a `tags:` key can be selected or skipped by name.
-  # In NikOS 0.6.1 that is ai-local, network, music and education, plus the
-  # `never`-tagged opt-ins. base, desktop, theming, github-setup, editors,
-  # cloud-ai-cli, agent-dev and dev-tools have no tags, so they always run and
-  # are what makes this image NikOS rather than stock Xubuntu.
-  #
-  # ai-local pulls Ollama models, which are gigabytes and are better fetched on
-  # the installed machine than shipped in an ISO. The other three are locale
-  # and interest specific. iso-forge fails the build if any of these names stop
-  # matching a real tag, rather than silently building more than was asked for.
-  skip_tags:
-    - ai-local
-    - network
-    - music
-    - education
-  extra_vars:
-    nikos_desktop_flavor: xubuntu-minimal
-    # VS Code refuses to run as root without --no-sandbox and an explicit
-    # --user-data-dir, so `code --install-extension` fails inside the chroot.
-    # Emptying these lists is the right answer rather than a workaround:
-    # extensions install into a user's own ~/.vscode, so there is no build-time
-    # place to put them that an installed account would inherit. They belong on
-    # the machine, after first login.
-    nikos_vscode_extensions: []
-    nikos_vscode_ai_extensions: []
+overlay:
+  - src: overlay/nikos-installer
+    dest: /

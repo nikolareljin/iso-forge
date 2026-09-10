@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <!-- Forge Anvil & Flame Gradients -->
+    <linearGradient id="flameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ff4500"/>
+      <stop offset="60%" stop-color="#ff8c00"/>
+      <stop offset="100%" stop-color="#ffd700"/>
+    </linearGradient>
+
+    <linearGradient id="metalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="discGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Outer Ring (ISO Disc Graphic) -->
+  <circle cx="250" cy="250" r="200" fill="none" stroke="url(#discGrad)" stroke-width="12" stroke-dasharray="18 8"/>
+  <circle cx="250" cy="250" r="160" fill="none" stroke="#334155" stroke-width="4"/>
+
+  <!-- Anvil Base (Forge Core) -->
+  <path d="M 160 320 L 340 320 L 320 280 L 290 280 L 290 250 L 350 250 C 360 250 365 240 355 235 L 320 220 L 180 220 C 160 220 150 235 150 250 L 210 250 L 210 280 L 180 280 Z" fill="url(#metalGrad)" stroke="#64748b" stroke-width="3"/>
+
+  <!-- Flame Layering (Automated Build/Burn Element) -->
+  <path d="M 250 120 C 230 160 210 180 210 210 C 210 232 228 250 250 250 C 272 250 290 232 290 210 C 290 180 270 160 250 120 Z" fill="url(#flameGrad)" filter="url(#glow)"/>
+  <path d="M 250 160 C 240 185 230 195 230 215 C 230 226 239 235 250 235 C 261 235 270 226 270 215 C 270 195 260 185 250 160 Z" fill="#ffffff" opacity="0.8"/>
+
+  <!-- Ansible / Automation Spark Nodes -->
+  <circle cx="170" cy="160" r="8" fill="#38bdf8"/>
+  <line x1="170" y1="160" x2="210" y2="190" stroke="#38bdf8" stroke-width="3" stroke-dasharray="4 4"/>
+
+  <circle cx="330" cy="160" r="8" fill="#38bdf8"/>
+  <line x1="330" y1="160" x2="290" y2="190" stroke="#38bdf8" stroke-width="3" stroke-dasharray="4 4"/>
+
+  <!-- Label -->
+  <text x="250" y="410" text-anchor="middle" font-family="'Inter', 'Segoe UI', sans-serif" font-weight="800" font-size="38" fill="#f8fafc" letter-spacing="3">ISO-FORGE</text>
+  <text x="250" y="435" text-anchor="middle" font-family="'Inter', 'Segoe UI', sans-serif" font-weight="500" font-size="14" fill="#f97316" letter-spacing="4">AUTOMATED OS BUILDER</text>
+</svg>

@@ -15,7 +15,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
   drive_warning_seen=0
   select_drive_called=0
-  flash_confirm_called=0
+  ventoy_called=0
 
   dialog_init() { :; }
   dialog() {
@@ -29,8 +29,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     SELECTED_DEVICE="sdb"
     return 0
   }
-  flash_confirm() {
-    flash_confirm_called=1
+  flash_with_ventoy() {
+    ventoy_called=1
     return 1
   }
 
@@ -46,7 +46,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   [[ "$status" -eq 1 ]]
   [[ "$drive_warning_seen" -eq 1 ]]
   [[ "$select_drive_called" -eq 1 ]]
-  [[ "$flash_confirm_called" -eq 1 ]]
+  [[ "$ventoy_called" -eq 1 ]]
   [[ "$SELECTED_IMAGE" == "$iso_path" ]]
   [[ -z "${SELECTED_DEVICE:-}" ]]
 )

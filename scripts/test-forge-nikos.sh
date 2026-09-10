@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# The NikOS recipe, and the guard that keeps its tag list honest.
-#
-# The real proof that NikOS builds is .github/workflows/nikos-iso.yml, which
-# takes about an hour. These are the checks worth having on every pull request:
-# they catch a recipe that has drifted from what the playbook actually offers,
-# which is the failure that would otherwise cost that hour to discover.
+# Fast checks for the NikOS post-install image recipe. The full artifact test
+# is scripts/test-nikos-xubuntu-iso.sh and requires a downloaded Xubuntu ISO.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,180 +18,34 @@ for m in yaml recipe fetch; do
   source "$REPO_ROOT/inc/forge/$m.sh"
 done
 
-CONFIG_FILE="$REPO_ROOT/config.json"
 RECIPE="$REPO_ROOT/recipes/nikos.yml"
+OVERLAY="$REPO_ROOT/recipes/overlay/nikos-installer"
+LAUNCHER="$OVERLAY/usr/local/bin/nikos-installer"
+PROFILE="$OVERLAY/usr/share/iso-forge/nikos-profiles/xubuntu-24.04.env"
+DESKTOP="$OVERLAY/usr/share/applications/nikos-installer.desktop"
 
 pass=0
 fail=0
-ok()  { printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); }
+ok() { printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf 'FAIL - %s\n' "$1"; fail=$((fail + 1)); }
 check() { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1 (expected '$3', got '$2')"; fi; }
 
-# --- the recipe itself ------------------------------------------------------
 recipe_load "$RECIPE" >/dev/null 2>&1 || { echo "recipes/nikos.yml does not load" >&2; exit 1; }
 ok "recipes/nikos.yml loads and validates"
+check "it builds on a Xubuntu base" "$(recipe_get '.base.catalog_id')" "Xubuntu_24_04_4_desktop_amd64"
+check "the output is named for the post-install image" "$(recipe_get '.output.name')" "nikos-xubuntu-24.04-amd64"
+check "the volume id is the recipe's" "$(recipe_get '.output.volume_id')" "NIKOS_XUBUNTU_2404"
+check "the recipe has one overlay" "$(recipe_get '.overlay | length')" "1"
+check "the overlay is copied into the image root" "$(recipe_get '.overlay[0].dest')" "/"
 
-check "it builds on a Xubuntu base" \
-  "$(recipe_get '.base.catalog_id')" "Xubuntu_24_04_4_desktop_amd64"
-
-if [[ -n "$(forge_catalog_url "$(recipe_get '.base.catalog_id')")" ]]; then
-  ok "that base resolves to a URL in config.json"
-else
-  bad "that base resolves to a URL in config.json"
-fi
-
-check "the output is named for NikOS"   "$(recipe_get '.output.name')"      "nikos-24.04-amd64"
-check "the volume id is the recipe's"   "$(recipe_get '.output.volume_id')" "NIKOS_2404"
-
-# The whole point of the NikOS path: the playbook's per-user work has to land
-# somewhere every account created by the installer inherits.
-check "per-user configuration targets /etc/skel" \
-  "$(recipe_get '.ansible.skel_home')" "/etc/skel"
-
-check "it provisions from the NikOS repository" \
-  "$(recipe_get '.ansible.repo')" "https://github.com/nikolareljin/nikos"
-
-# A branch can change under a recipe, and what the recipe pins decides what
-# ends up in the image, so the pin has to be immutable. A bare X.Y.Z is a tag.
-ref=$(recipe_get '.ansible.ref // ""')
-if [[ "$ref" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  ok "the playbook is pinned to an immutable tag ($ref)"
-else
-  bad "the playbook is pinned to an immutable tag (got '$ref')"
-fi
-
-# github-setup is a role with no `tags:` key, so naming it in skip_tags does
-# nothing at all. It was in this recipe once, and the build silently included
-# it. That specific mistake stays caught.
-if recipe_list '.ansible.skip_tags' | grep -qx "github-setup"; then
-  bad "skip_tags does not name the untagged github-setup role"
-else
-  ok "skip_tags does not name the untagged github-setup role"
-fi
-
-mapfile -t skips < <(recipe_list '.ansible.skip_tags')
-if ((${#skips[@]})); then
-  ok "the heavy optional roles are skipped (${#skips[@]} tags)"
-else
-  bad "the heavy optional roles are skipped"
-fi
-# Ollama models are gigabytes and belong on the installed machine, not in an ISO.
-if printf '%s\n' "${skips[@]}" | grep -qx "ai-local"; then
-  ok "the local AI stack is left out of the image"
-else
-  bad "the local AI stack is left out of the image"
-fi
-
-# The first real build failed here: `code --install-extension` refuses to run as
-# root, and extensions install into a user's own ~/.vscode anyway, so there is
-# no build-time place to put them.
-check "VS Code extensions are left to first login" \
-  "$(recipe_get '.ansible.extra_vars.nikos_vscode_extensions | length')" "0"
-check "AI VS Code extensions are left to first login" \
-  "$(recipe_get '.ansible.extra_vars.nikos_vscode_ai_extensions | length')" "0"
-
-# A list has to reach ansible as a list. `-e key=value` always makes a string,
-# and a role concatenating that with another list fails on the type.
-check "extra_vars keeps a list a list" \
-  "$(recipe_get '.ansible.extra_vars.nikos_vscode_extensions | type')" "array"
-check "extra_vars keeps a string a string" \
-  "$(recipe_get '.ansible.extra_vars.nikos_desktop_flavor | type')" "string"
-
-# --- the tag guard ----------------------------------------------------------
-# shellcheck source=/dev/null
-source "$REPO_ROOT/inc/forge/chroot.sh"
-# shellcheck source=/dev/null
-source "$REPO_ROOT/inc/forge/ansible.sh"
-
-# Stand in for the chroot with the shape ansible-playbook --list-tags prints.
-forge_in_chroot() {
-  case "${FAKE_TAGS_MODE:-normal}" in
-    normal) printf 'play #1 (local): NikOS Setup\tTAGS: []\n      TASK TAGS: [ai-local, always, education, music, network]\n' ;;
-    empty)  printf 'play #1 (local): NikOS Setup\n' ;;
-    fail)   return 1 ;;
-  esac
-}
-
-if forge_ansible_check_tags /opt/nikos site.yml inventory/local skip_tags ai-local network >/dev/null 2>&1; then
-  ok "tags the playbook defines are accepted"
-else
-  bad "tags the playbook defines are accepted"
-fi
-
-if forge_ansible_check_tags /opt/nikos site.yml inventory/local skip_tags github-setup >/dev/null 2>&1; then
-  bad "a skip_tag the playbook does not define is rejected"
-else
-  ok "a skip_tag the playbook does not define is rejected"
-fi
-
-if forge_ansible_check_tags /opt/nikos site.yml inventory/local tags nonexistent >/dev/null 2>&1; then
-  bad "a tag the playbook does not define is rejected"
-else
-  ok "a tag the playbook does not define is rejected"
-fi
-
-if forge_ansible_check_tags /opt/nikos site.yml inventory/local skip_tags >/dev/null 2>&1; then
-  ok "an empty tag list is accepted"
-else
-  bad "an empty tag list is accepted"
-fi
-
-# If the tags cannot be listed at all, that is not a reason to refuse to build.
-FAKE_TAGS_MODE=fail
-if forge_ansible_check_tags /opt/nikos site.yml inventory/local skip_tags anything >/dev/null 2>&1; then
-  ok "an unreadable tag listing warns rather than failing the build"
-else
-  bad "an unreadable tag listing warns rather than failing the build"
-fi
-FAKE_TAGS_MODE=empty
-if forge_ansible_check_tags /opt/nikos site.yml inventory/local skip_tags anything >/dev/null 2>&1; then
-  ok "a playbook reporting no tags warns rather than failing the build"
-else
-  bad "a playbook reporting no tags warns rather than failing the build"
-fi
-FAKE_TAGS_MODE=normal
-
-# Galaxy installs collections under $HOME/.ansible and ansible-playbook reads
-# them from there, so the two must run with the same HOME. Installing with one
-# and running with another lost the collections and failed a real build with
-# "couldn't resolve module/action 'community.general.timezone'".
-homes=$(grep -c 'export HOME=' "$REPO_ROOT/inc/forge/ansible.sh")
-check "galaxy and the playbook both run with HOME set" "$homes" "2"
-
-# A tag is a literal name. With a regex match, a tag carrying a metacharacter
-# matches something it does not name, or fails to match itself, and the guard
-# then reports the opposite of the truth.
-forge_in_chroot() {
-  printf 'play #1 (local): p\tTAGS: []\n      TASK TAGS: [ollama-models, ai.local, plain]\n'
-}
-if forge_ansible_check_tags /opt/x site.yml inventory/local skip_tags 'ollama-models' >/dev/null 2>&1; then
-  ok "a literal tag name is accepted"
-else
-  bad "a literal tag name is accepted"
-fi
-# 'ai.local' exists; 'ai-local' does not, and as a regex the dot would match the dash.
-if forge_ansible_check_tags /opt/x site.yml inventory/local skip_tags 'ai-local' >/dev/null 2>&1; then
-  bad "a tag matching only as a regex is rejected"
-else
-  ok "a tag matching only as a regex is rejected"
-fi
-if forge_ansible_check_tags /opt/x site.yml inventory/local skip_tags 'ollama-.*' >/dev/null 2>&1; then
-  bad "a regex pattern is not treated as a tag"
-else
-  ok "a regex pattern is not treated as a tag"
-fi
-
-# --- the verifier ships and is runnable ------------------------------------
-if [[ -x "$REPO_ROOT/scripts/verify-nikos-iso.sh" ]]; then
-  ok "the ISO verifier is executable"
-else
-  bad "the ISO verifier is executable"
-fi
-if bash -n "$REPO_ROOT/scripts/verify-nikos-iso.sh" 2>/dev/null; then
-  ok "the ISO verifier parses"
-else
-  bad "the ISO verifier parses"
-fi
+if recipe_has '.ansible'; then bad "the recipe does not pre-provision NikOS with Ansible"; else ok "the recipe does not pre-provision NikOS with Ansible"; fi
+if recipe_has '.packages'; then bad "the recipe does not install packages at build time"; else ok "the recipe does not install packages at build time"; fi
+if [[ -x "$LAUNCHER" ]] && bash -n "$LAUNCHER"; then ok "the post-install launcher is executable and parses"; else bad "the post-install launcher is executable and parses"; fi
+if [[ -f "$PROFILE" ]]; then ok "the Xubuntu 24.04 NikOS profile ships"; else bad "the Xubuntu 24.04 NikOS profile ships"; fi
+if [[ -f "$DESKTOP" ]] && grep -qx 'Exec=nikos-installer' "$DESKTOP"; then ok "the desktop launcher starts nikos-installer"; else bad "the desktop launcher starts nikos-installer"; fi
+if grep -q 'boot=casper' "$LAUNCHER"; then ok "the launcher refuses the live session"; else bad "the launcher refuses the live session"; fi
+if grep -q 'NIKOS_REPO_REF="0.6.5"' "$PROFILE"; then ok "the profile pins the immutable NikOS release tag"; else bad "the profile pins the immutable NikOS release tag"; fi
+if grep -q 'raw.githubusercontent.com/${github_repo}/${NIKOS_REPO_REF}/install.sh' "$LAUNCHER"; then ok "the launcher fetches the installer source at the selected ref"; else bad "the launcher fetches the installer source at the selected ref"; fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

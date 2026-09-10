@@ -1,21 +1,21 @@
-.TH ISOFORGE 1 "2026-09-03" "isoforge 2.1.3" "User Commands"
+.TH ISOFORGE 1 "2026-09-10" "isoforge 2.2.0" "User Commands"
 .SH NAME
-isoforge \- downloads Linux images, writes them to USB (single image or Ventoy multi-ISO), and builds custom installable ISOs from a recipe
+isoforge \- downloads Linux images, prepares Ventoy USB drives, and builds custom installable ISOs from a base ISO and recipe
 .SH SYNOPSIS
 .B isoforge
 [OPTIONS] [COMMAND [COMMAND_OPTIONS]]
 .SH DESCRIPTION
-Isoforge downloads Linux images, writes them to USB (single image or Ventoy multi-ISO), and builds custom installable ISOs from a recipe.
+Isoforge downloads Linux images, prepares Ventoy USB drives, and builds custom installable ISOs from a base ISO and recipe.
 .SH OPTIONS
 .TP
 .B download
 Download one or more ISOs from config.json. Options: --config PATH, -h, --help.
 .TP
 .B burn
-Write an ISO from download_dir, or a browsed local ISO, to a drive. Options: --config PATH, -h, --help.
+Prepare a Ventoy drive and copy selected ISO files to it. Options: --config PATH, -h, --help.
 .TP
 .B build
-Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
+Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, --base-iso PATH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
 .TP
 .B setup
 Install project dependencies. Parameters: PACKAGE. Options: -h, --help.

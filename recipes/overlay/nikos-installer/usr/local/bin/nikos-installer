@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Start NikOS only after the base operating system has been installed.
+set -euo pipefail
+
+PROFILE_DIR="/usr/share/iso-forge/nikos-profiles"
+DEFAULT_PROFILE="xubuntu-24.04"
+
+usage() {
+  cat <<'EOF'
+Usage: nikos-installer [--profile NAME] [--ref REF] [--help]
+
+Starts the NikOS installer after selecting a supported base-system profile.
+The NikOS installer then asks which NikOS bundles and options to install.
+EOF
+}
+
+is_live_session() {
+  grep -Eq '(^|[[:space:]])boot=casper([[:space:]]|$)' /proc/cmdline 2>/dev/null
+}
+
+choose_profile() {
+  local profile file label choice i
+  local -a profiles=()
+
+  shopt -s nullglob
+  for file in "$PROFILE_DIR"/*.env; do
+    profile="$(basename "$file" .env)"
+    NIKOS_PROFILE_LABEL=""
+    # shellcheck source=/dev/null
+    source "$file"
+    label="${NIKOS_PROFILE_LABEL:-$profile}"
+    profiles+=("$profile" "$label")
+  done
+  shopt -u nullglob
+
+  ((${#profiles[@]})) || {
+    echo "No NikOS installation profiles are installed." >&2
+    return 1
+  }
+
+  if command -v dialog >/dev/null 2>&1 && [[ -e /dev/tty ]]; then
+    choice="$(dialog --clear --stdout --title 'NikOS installation profile' \
+      --menu 'Choose the base system to configure with NikOS:' 12 74 4 \
+      "${profiles[@]}" </dev/tty)" || return 1
+  else
+    printf 'NikOS installation profiles:\n' >&2
+    for ((i = 0; i < ${#profiles[@]}; i += 2)); do
+      printf '  %s) %s\n' "${profiles[i]}" "${profiles[i + 1]}" >&2
+    done
+    printf 'Profile [%s]: ' "$DEFAULT_PROFILE" >&2
+    read -r choice </dev/tty || true
+    choice="${choice:-$DEFAULT_PROFILE}"
+  fi
+  printf '%s\n' "$choice"
+}
+
+load_profile() {
+  local profile="$1" file="$PROFILE_DIR/$profile.env"
+  [[ -f "$file" ]] || { echo "Unknown NikOS profile: $profile" >&2; return 2; }
+  # shellcheck source=/dev/null
+  source "$file"
+  [[ -n "${NIKOS_PROFILE_LABEL:-}" && -n "${NIKOS_REPO_URL:-}" && -n "${NIKOS_REPO_REF:-}" ]] || {
+    echo "Invalid NikOS profile: $profile" >&2
+    return 2
+  }
+}
+
+download_installer() {
+  local url="$1" destination="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --location --show-error --silent "$url" --output "$destination"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$destination" "$url"
+  else
+    echo "NikOS needs curl or wget to download its installer." >&2
+    return 1
+  fi
+}
+
+profile="$DEFAULT_PROFILE"
+ref_override=""
+choose_default=true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile) profile="${2:?--profile needs a profile name}"; choose_default=false; shift 2 ;;
+    --ref) ref_override="${2:?--ref needs a branch or tag}"; shift 2 ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if is_live_session; then
+  echo "NikOS must be started after Xubuntu installation is complete." >&2
+  echo "Install Xubuntu, reboot into the installed system, then choose 'Install NikOS'." >&2
+  exit 1
+fi
+
+if "$choose_default"; then
+  profile="$(choose_profile)" || exit $?
+fi
+load_profile "$profile"
+if [[ -n "$ref_override" ]]; then
+  NIKOS_REPO_REF="$ref_override"
+fi
+
+tmp="$(mktemp "${TMPDIR:-/tmp}/nikos-install.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+# The repository URL is for git clone; fetching it directly would return the
+# GitHub HTML page. Fetch the installer source at the exact requested ref.
+github_repo="${NIKOS_REPO_URL#https://github.com/}"
+github_repo="${github_repo%.git}"
+if [[ "$github_repo" != */* ]]; then
+  echo "NikOS installer downloads require a GitHub repository URL." >&2
+  exit 2
+fi
+installer_url="https://raw.githubusercontent.com/${github_repo}/${NIKOS_REPO_REF}/install.sh"
+
+printf 'Starting %s (%s)…\n' "$NIKOS_PROFILE_LABEL" "$NIKOS_REPO_REF"
+download_installer "$installer_url" "$tmp"
+chmod 700 "$tmp"
+env NIKOS_REPO_URL="$NIKOS_REPO_URL" NIKOS_REPO_REF="$NIKOS_REPO_REF" \
+  NIKOS_PROFILE="$profile" bash "$tmp" --ref "$NIKOS_REPO_REF"

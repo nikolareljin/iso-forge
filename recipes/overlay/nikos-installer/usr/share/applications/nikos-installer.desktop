@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install NikOS
+Comment=Choose NikOS options after Xubuntu is installed
+Exec=nikos-installer
+Icon=system-software-install
+Terminal=true
+Categories=System;Settings;

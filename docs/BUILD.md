@@ -166,84 +166,33 @@ namespace and a running daemon, neither of which exists in a chroot. A `snap`
 section is reported and skipped rather than silently dropped; seed those on
 first boot instead.
 
-## Using NikOS
+## Using NikOS after base installation
 
-```yaml
-ansible:
-  repo: https://github.com/nikolareljin/nikos
-  ref: "0.6.3"          # an immutable tag, never a branch
-  playbook: site.yml
-  skel_home: /etc/skel
-  # Only tags a role actually declares. github-setup has none, so naming it
-  # here would do nothing, and the tag guard rejects it rather than let the
-  # build quietly include what you meant to leave out.
-  skip_tags: [ai-local, network, music, education]
-  extra_vars:
-    nikos_desktop_flavor: xubuntu-minimal
+`recipes/nikos.yml` is intentionally not an Ansible recipe. It preserves the
+stock Xubuntu 24.04 installer and overlays only an **Install NikOS** desktop
+entry, the `nikos-installer` launcher, and the `xubuntu-24.04` profile.
+
+Install Xubuntu first and reboot into the installed system. Then select
+**Install NikOS** from the application menu. The launcher refuses to run in the
+live session, asks for an available NikOS profile, fetches the pinned NikOS
+installer, and hands control to its normal TUI. That TUI selects the optional
+bundles and writes NikOS configuration on the installed machine; no NikOS
+packages, configuration, models, or Ansible run are baked into the ISO.
+
+The first profile supports Xubuntu 24.04. The profile directory and launcher
+arguments (`--profile` and `--ref`) are deliberately extensible for Ubuntu
+Server and antiX, but those profiles are not shipped yet.
+
+To perform the full artifact test after downloading Xubuntu 24.04.4 with
+iso-forge:
+
+```bash
+./scripts/test-nikos-xubuntu-iso.sh
 ```
 
-The playbook is cloned into the image and run with `--connection=local`.
-
-NikOS is written for a machine someone is sitting at: `site.yml` derives
-`nikos_home` and `nikos_user` from the controller's environment, and the
-theming role writes into that user's `~/.config`. In a chroot there is no such
-user and the environment resolves to root, so `skel_home` points the per-user
-half at `/etc/skel`. Every account the installer creates then inherits it.
-
-`HOME` is set to the same path for the playbook run. Roles install per-user
-tooling by shelling out to installers that honour `$HOME` while their `creates:`
-guards look under the playbook's own home variable, so the two disagreeing
-means an installer writes to one place and the next task reads the other.
-NikOS's nvm step failed exactly that way during development, installing into
-`/root/.nvm` and then failing to source `/etc/skel/.nvm/nvm.sh`.
-
-Tasks that genuinely need a live session cannot run at build time. NikOS
-already guards its `xfconf-query` calls with `failed_when: false`, so they
-no-op; anything else belongs in `skip_tags`, and NikOS's own autostart pass is
-the right mechanism for work that must happen at first login.
-
-### extra_vars keeps its types
-
-`ansible.extra_vars` is passed to the playbook as a single JSON object, so a
-recipe can hand it lists and mappings rather than only strings. This matters
-more than it sounds: `-e key=value` makes a string no matter what it looks
-like, so a list passed that way arrives as `"[]"` and any role that
-concatenates it with another list fails on the type.
-
-`nikos_home` and `nikos_user` are merged in first, so a recipe can override
-them if it needs to.
-
-### Tags only work on roles that declare them
-
-`--tags` and `--skip-tags` match tags, not role names. A role listed in a
-playbook without a `tags:` key cannot be selected or skipped at all. In NikOS
-0.6.1 that means `base`, `desktop`, `theming`, `github-setup`, `editors`,
-`cloud-ai-cli`, `agent-dev` and `dev-tools` always run, and only `ai-local`,
-`network`, `music`, `education` and the `never`-tagged opt-ins can be turned
-off.
-
-This matters because the two failure modes are not symmetric. A `tags` entry
-that matches nothing runs less than you asked for and is obvious. A `skip_tags`
-entry that matches nothing runs *more* than you asked for, silently, and for an
-image build that is the expensive direction. `recipes/nikos.yml` shipped with
-`skip_tags: [github-setup]` in 2.0.0, which did nothing at all.
-
-So iso-forge asks the playbook what tags it has, with
-`ansible-playbook --list-tags`, and fails the build if a recipe names one that
-does not exist. If the listing cannot be read it warns and continues, because
-an unreadable tag list is not a reason to refuse to build.
-
-### Set ansible.skip_tags, not ansible.tags
-
-`ansible.tags` and `ansible.skip_tags` are currently passed to one
-`ansible-playbook` invocation, and `--tags` restricts a run to tasks carrying
-those tags. A role declared `tags: [never, <name>]` — the normal way to write
-an opt-in role — therefore installs while every untagged role is skipped, and
-the image comes out looking like the stock base with one extra package.
-
-**Set `ansible.skip_tags` only until this is fixed.** No recipe here sets
-`ansible.tags`, which is why it has not produced a bad image.
-`docs/IMAGE-COMPOSITION.md` describes the two-pass run that replaces it.
+It uses `~/Downloads/iso_images/xubuntu-24.04.4-desktop-amd64.iso` by default,
+creates `nikos-xubuntu-24.04-amd64.iso` beside it, and inspects the resulting
+ISO. Use `NIKOS_XUBUNTU_ISO=/path/to/xubuntu.iso` for another location.
 
 ## Choosing what the image contains
 
@@ -256,17 +205,16 @@ defect that blocks it, are described in `docs/IMAGE-COMPOSITION.md`.
 Xubuntu base, then checks the artifact rather than the build log:
 
 ```bash
-scripts/verify-nikos-iso.sh ~/Downloads/iso_images/nikos-24.04-amd64.iso
+scripts/verify-nikos-iso.sh ~/Downloads/iso_images/nikos-xubuntu-24.04-amd64.iso
 ```
 
 It asserts the image is ISO 9660, carries an El Torito boot record, has the
-recipe's volume id, and is the size a desktop image should be; then unpacks the
-root filesystem and looks for `/usr/local/bin/nikos`, the NikOS Plymouth theme,
-the Xfce session, LightDM, desktop configuration in `/etc/skel`, an emptied
-`/etc/machine-id`, and the absence of the build's own `policy-rc.d`.
+recipe's volume id, then unpacks the root filesystem and checks the launcher,
+Xubuntu profile and desktop entry. It also proves that `/usr/local/bin/nikos`
+was not preinstalled into the base system.
 
-That workflow runs on demand, and automatically when the builder, the recipes
-or the workflow itself change. It takes 30 to 60 minutes.
+The full test runs only after the Xubuntu base image is available and needs
+root plus about 25 GB of scratch space.
 
 ## Checking the result
 
