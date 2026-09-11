@@ -90,6 +90,13 @@ forge_check_arch() {
     log_warn "Could not tell the base image's architecture; assuming it matches $host_arch."
     return 0
   fi
+  if [[ "$host_arch" == "amd64" && "$iso_arch" == "i386" ]]; then
+    if linux32 true >/dev/null 2>&1; then
+      log_info "Using host i386 compatibility for the 32-bit base image."
+      return 0
+    fi
+  fi
+
   if [[ "$iso_arch" != "$host_arch" ]]; then
     log_error "Base image is $iso_arch but this host is $host_arch."
     log_error "Cross-architecture builds are not supported; run this on an $iso_arch machine."

@@ -74,6 +74,7 @@ if command -v jq >/dev/null 2>&1; then
         OpenMediaVault_8_3_1_amd64 \
         OPNsense_26_7_dvd_amd64 \
         TrueNAS_Community_25_10_7_amd64; do
+        antiX_26_i386_core;
         jq -e --arg id "$catalog_id" \
             '.distros[] | select(.id == $id and (.url | startswith("https://")))' \
             config.json >/dev/null

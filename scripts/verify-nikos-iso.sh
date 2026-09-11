@@ -83,7 +83,13 @@ xorriso -osirrox on -indev "$ISO" -extract / "$WORK/iso" >/dev/null 2>&1
 chmod -R u+w "$WORK/iso" 2>/dev/null || true
 
 have "casper/ is present" "$WORK/iso/casper"
-check ".disk/info names the build" "$(cat "$WORK/iso/.disk/info" 2>/dev/null)" "NIKOS_XUBUNTU_2404"
+# This is release metadata read by Subiquity while it configures the installer,
+# not a place for the custom volume id. A one-word replacement crashes it.
+if [[ -s "$WORK/iso/.disk/info" ]] && [[ "$(cat "$WORK/iso/.disk/info")" != "NIKOS_XUBUNTU_2404" ]]; then
+  ok ".disk/info preserves the base release metadata"
+else
+  bad ".disk/info preserves the base release metadata"
+fi
 
 # On a layered image the squashfs files are diffs, so inspecting any one of
 # them says nothing: the base layer has no NikOS in it and the top layer has

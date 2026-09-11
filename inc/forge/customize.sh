@@ -213,9 +213,10 @@ forge_overlay() {
 }
 
 forge_hooks() {
+  local phase="${3:-chroot}"
   local recipe_dir="$1" rootfs="$2"
   local -a hooks
-  mapfile -t hooks < <(recipe_list '.hooks.chroot')
+  mapfile -t hooks < <(recipe_list ".hooks.$phase")
   ((${#hooks[@]})) || return 0
 
   log_info "Running ${#hooks[@]} chroot hook(s)"
@@ -247,7 +248,8 @@ forge_customize() {
   forge_apt_sources        || return $?
   forge_apt_packages       || return $?
   forge_flatpaks           || return $?
-  forge_ansible "$rootfs"  || return $?
+  forge_hooks   "$recipe_dir" "$rootfs" bootstrap || return $?
+  forge_ansible "$rootfs" "$recipe_dir" || return $?
   forge_overlay "$recipe_dir" "$rootfs" || return $?
   forge_hooks   "$recipe_dir" "$rootfs" || return $?
 }

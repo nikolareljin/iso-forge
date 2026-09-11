@@ -98,7 +98,7 @@ recipe_validate() {
 
   # The build falls back to output.label when volume_id is absent, so the rules
   # below apply to whichever value ends up on the image. A label like
-  # "NikOS 24.04" is fine as a label and not fine as a volume id, and the error
+  # "Custom OS 24.04" is fine as a label and not fine as a volume id, and the error
   # names the field to set.
   local vol field
   vol=$(recipe_get '.output.volume_id // ""')
@@ -125,7 +125,7 @@ recipe_validate() {
   fi
 
   if recipe_has '.ansible'; then
-    [[ "$(recipe_get '.ansible.repo // ""')" != "" ]] || errors+=("ansible.repo: required when an ansible section is present")
+    [[ "$(recipe_get '.ansible.repo // .ansible.source // ""')" != "" ]] || errors+=("ansible.repo or ansible.source: required when an ansible section is present")
     [[ "$(recipe_get '.ansible.playbook // ""')" != "" ]] || errors+=("ansible.playbook: required when an ansible section is present")
   fi
 
@@ -140,7 +140,7 @@ recipe_validate() {
 }
 
 # Load recipe.yml, then recipe.local.yml on top of it when present. The local
-# layer is the same idea as NikOS's vars/local.yml: tracked defaults, untracked
+# layer is the same idea as a consumer's local configuration: tracked defaults, untracked
 # machine-specific overrides, deep-merged rather than replaced wholesale.
 recipe_load() {
   local path="$1"

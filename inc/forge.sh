@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # DESCRIPTION: Build a custom installable ISO from a base image and a recipe.
-# USAGE: forge --recipe PATH [--base-iso PATH] [--config PATH] [--output DIR] [--work-dir DIR] [--dry-run] [--smoke-test] [--keep] [--version] [--help]
+# USAGE: forge (--recipe PATH | --integration PATH | --integration-repo URL --ref SHA) [OPTIONS]
 # PARAMETERS:
-#   -r, --recipe PATH   Recipe to build. Required.
+#   -r, --recipe PATH   Legacy recipe to build.
+#       --integration PATH  Directory containing a consumer isoforge.yml.
+#       --integration-repo URL --ref SHA  Clone a pinned consumer integration.
 #       --base-iso PATH Override the recipe base with a local ISO.
 #   -o, --output DIR    Where to write the ISO. Defaults to download_dir from config.json.
 #       --config PATH   Override the config file the distro catalog is read from.
@@ -37,7 +39,7 @@ shlib_import logging file help
 
 # shellcheck source=/dev/null
 source "$REPO_ROOT/inc/download-state.sh"
-for module in yaml recipe preflight fetch extract chroot distrodeck customize ansible squashfs image verify; do
+for module in yaml recipe integration preflight fetch extract chroot distrodeck customize ansible squashfs image verify; do
   # shellcheck source=/dev/null
   source "$REPO_ROOT/inc/forge/$module.sh"
 done
@@ -47,6 +49,9 @@ CONFIG_FILE="${CONFIG_FILE:-$REPO_ROOT/config.json}"
 ISOFORGE_VERSION="${ISOFORGE_VERSION:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo unknown)}"
 
 RECIPE_PATH=""
+INTEGRATION_PATH=""
+INTEGRATION_REPO=""
+INTEGRATION_REF=""
 OUTPUT_DIR=""
 WORK_DIR="${ISOFORGE_WORK_DIR:-/var/tmp/isoforge}"
 DRY_RUN=0
@@ -60,6 +65,9 @@ parse_args() {
   while (($#)); do
     case "$1" in
       -r|--recipe)   RECIPE_PATH="${2:-}"; shift 2 ;;
+      --integration) INTEGRATION_PATH="${2:-}"; shift 2 ;;
+      --integration-repo) INTEGRATION_REPO="${2:-}"; shift 2 ;;
+      --ref)         INTEGRATION_REF="${2:-}"; shift 2 ;;
       --base-iso)    BASE_ISO_OVERRIDE="${2:-}"; shift 2 ;;
       -o|--output)   OUTPUT_DIR="${2:-}"; shift 2 ;;
       # `isoforge build` forwards its arguments here, and `isoforge` documents
@@ -75,9 +83,17 @@ parse_args() {
     esac
   done
 
-  if [[ -z "$RECIPE_PATH" ]]; then
-    log_error "A recipe is required. Try: forge --recipe recipes/example.yml"
+  local supplied=0
+  [[ -n "$RECIPE_PATH" ]] && supplied=$((supplied + 1))
+  [[ -n "$INTEGRATION_PATH" ]] && supplied=$((supplied + 1))
+  [[ -n "$INTEGRATION_REPO" ]] && supplied=$((supplied + 1))
+  if ((supplied != 1)); then
+    log_error "Select exactly one of --recipe, --integration, or --integration-repo"
     usage
+    exit 2
+  fi
+  if [[ -n "$INTEGRATION_REPO" && -z "$INTEGRATION_REF" ]]; then
+    log_error "--integration-repo requires --ref with a full commit SHA"
     exit 2
   fi
 
@@ -127,9 +143,19 @@ main() {
   parse_args "$@"
 
   local recipe_dir
-  recipe_dir="$(cd "$(dirname "$RECIPE_PATH")" && pwd)"
-
-  recipe_load "$RECIPE_PATH" || exit $?
+  if [[ -n "$INTEGRATION_REPO" ]]; then
+    local checkout_root
+    checkout_root="${WORK_DIR%/}/integration"
+    forge_integration_checkout "$INTEGRATION_REPO" "$INTEGRATION_REF" "$checkout_root" || exit $?
+    INTEGRATION_PATH="$checkout_root"
+  fi
+  if [[ -n "$INTEGRATION_PATH" ]]; then
+    forge_integration_load "$INTEGRATION_PATH" || exit $?
+    recipe_dir="$INTEGRATION_DIR"
+  else
+    recipe_dir="$(cd "$(dirname "$RECIPE_PATH")" && pwd)"
+    recipe_load "$RECIPE_PATH" || exit $?
+  fi
 
   local name label volume out
   name=$(recipe_get '.output.name')
@@ -140,7 +166,7 @@ main() {
   resolve_output_dir
   out="$OUTPUT_DIR/${name}.iso"
 
-  log_info "Recipe:  $(recipe_get '.recipe')"
+  log_info "Build:   $(recipe_get '.recipe')"
   log_info "Output:  $out"
   log_info "Work:    $WORK_DIR"
 

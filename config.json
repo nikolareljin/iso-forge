@@ -296,6 +296,11 @@
       "id": "Xbox_Ubuntu_Server_amd64_note",
       "label": "Xbox (UEFI-enabled) — Use standard Ubuntu Server ISO (manual steps)",
       "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso"
+    },
+    {
+      "id": "antiX_26_i386_core",
+      "label": "antiX 26 Core — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-core.iso/download"
     }
   ]
 }

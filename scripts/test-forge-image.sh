@@ -49,7 +49,7 @@ make_base() {
 
   printf 'synthetic\n' >"$root/rootfs/etc/os-release"
   printf 'placeholder\n' >"$root/rootfs/usr/bin/true-ish"
-  printf 'base image\n' >"$root/tree/.disk/info"
+  printf 'Synthetic 24.04 release amd64\n' >"$root/tree/.disk/info"
   printf 'nothing here\n' >"$root/tree/README.diskdefines"
 
   case "$layout" in
@@ -139,7 +139,7 @@ before=$(md5sum "$work/iso/md5sum.txt" | awk '{print $1}')
 forge_finalize_tree "$work/iso" "REBUILT" "$base" >/dev/null 2>&1
 after=$(md5sum "$work/iso/md5sum.txt" | awk '{print $1}')
 if [[ "$before" != "$after" ]]; then ok "md5sum.txt is regenerated"; else bad "md5sum.txt is regenerated"; fi
-check ".disk/info carries the new label" "$(cat "$work/iso/.disk/info")" "REBUILT"
+check ".disk/info keeps the base release metadata" "$(cat "$work/iso/.disk/info")" "Synthetic 24.04 release amd64"
 
 out="$work/out.iso"
 if forge_pack "$work/iso" "$base" "$out" "REBUILT" >/dev/null 2>&1; then
@@ -154,6 +154,12 @@ else
 fi
 volid=$(xorriso -indev "$out" -pvd_info 2>&1 | sed -n "s/^Volume id *: *'\(.*\)'$/\1/p" | head -1)
 check "the volume id is applied" "$volid" "REBUILT"
+
+if grep -qE 'md5sum\.txt\.new|\./boot\.catalog|\./isolinux/boot\.cat' "$work/iso/md5sum.txt"; then
+  bad "md5sum.txt excludes generated files"
+else
+  ok "md5sum.txt excludes generated files"
+fi
 
 if forge_verify "$out" >/dev/null 2>&1; then ok "the built image verifies"; else bad "the built image verifies"; fi
 check "a checksum file is written alongside" "$([[ -f "$out.sha256" ]] && echo yes || echo no)" "yes"
