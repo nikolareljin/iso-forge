@@ -60,6 +60,7 @@ cd "$ROOT_DIR"
 ./scripts/test-forge-image.sh
 ./scripts/test-forge-nikos.sh
 ./scripts/test-forge-ansible.sh
+./scripts/test-rpm-manifest.sh
 
 if command -v jq >/dev/null 2>&1; then
     jq -e '.distros and (.distros | type == "array")' config.json >/dev/null

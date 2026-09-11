@@ -9,7 +9,7 @@ command and package identity remain unchanged.
 
 ## Required order
 
-1. Finish and merge this documentation and the corresponding keystone backlog
+1. Finish and merge this documentation and the corresponding R-765 backlog
    item before changing the GitHub repository name.
 2. Inventory every owned-repository reference to `nikolareljin/burn-iso` and
    classify it as source, package metadata, workflow, documentation, release
@@ -30,8 +30,8 @@ command and package identity remain unchanged.
   URLs.
 - GitHub Actions workflow configuration, release targets and Pages links.
 - References in every owned repository, including NikOS, distrodeck,
-  kiosk-frame, ai-runner, ci-helpers, script-helpers, keystone, repo-sentinel
-  and the shared tool-suite navigation.
+  kiosk-frame, ai-runner, ci-helpers, script-helpers, R-765, R-235 and the
+  shared tool-suite navigation.
 
 ## In-repository status
 
@@ -41,6 +41,6 @@ CLI, package, Homebrew formula and man page are untouched.
 
 Step 3, the GitHub-side rename, has not happened yet, so `nikolareljin/iso-forge`
 does not resolve until it does. Step 5 and the downstream reference migration in
-other repositories are still outstanding. Live progress belongs in the keystone
+other repositories are still outstanding. Live progress belongs in the R-765
 issue created from its backlog item; this document records the migration
 contract rather than status.

@@ -48,7 +48,9 @@ install -m 0644 docs/man/isoforge.1 %{buildroot}/usr/share/man/man1/isoforge.1
 /usr/share/isoforge/recipes
 /usr/share/isoforge/assets
 /usr/share/doc/isoforge/USER-GUIDE.md
-/usr/share/man/man1/isoforge.1
+# RPM's brp-compress hook may compress the installed page to .1.gz. Keep the
+# manifest valid regardless of whether that hook runs on the build host.
+/usr/share/man/man1/isoforge.1*
 
 %changelog
 * Thu Sep 10 2026 Nikola Reljin <nikola.reljin@gmail.com> - 2.2.0-1
