@@ -6,6 +6,20 @@ forge_ansible_available() {
   recipe_has '.ansible'
 }
 
+forge_ansible_prepare_antix() {
+  [[ "${FORGE_LAYOUT:-}" == "antix" ]] || return 0
+
+  # antiX 26 ships opensysusers 0.7, whose parser treats a sysusers entry
+  # such as "g _ssh" as an explicit empty GID. The OpenSSH client package
+  # legitimately uses that form, so its post-install script otherwise fails
+  # before Ansible can be installed. Create this standard system group first;
+  # the package sysusers step then sees the existing group and is a no-op.
+  forge_in_chroot "getent group _ssh >/dev/null 2>&1 || groupadd --system _ssh" || {
+    log_error "Could not prepare the antiX system account needed by OpenSSH"
+    return 1
+  }
+}
+
 forge_ansible() {
   local rootfs="$1" recipe_dir="${2:-}"
   forge_ansible_available || return 0
@@ -20,10 +34,13 @@ forge_ansible() {
 
   log_info "Provisioning with the selected Ansible integration"
 
-  forge_in_chroot "command -v ansible-playbook >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y --no-install-recommends ansible-core git ca-certificates)" || {
-    log_error "Could not install ansible-core inside the image"
-    return 1
-  }
+  if ! forge_in_chroot "command -v ansible-playbook >/dev/null 2>&1"; then
+    forge_ansible_prepare_antix || return $?
+    forge_in_chroot "apt-get update -qq && apt-get install -y --no-install-recommends ansible-core git ca-certificates" || {
+      log_error "Could not install ansible-core inside the image"
+      return 1
+    }
+  fi
 
   if [[ "$source" == "integration" ]]; then
     [[ -n "$recipe_dir" ]] || { log_error "Integration source directory is missing"; return 2; }

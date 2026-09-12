@@ -41,6 +41,19 @@ grep -Fq 'vars_json=$(jq -c --arg home "$skel_home"' "$REPO_ROOT/inc/forge/ansib
 grep -Fq "args+=(-e "\$vars_json")" "$REPO_ROOT/inc/forge/ansible.sh"
 [[ "$(grep -c 'export HOME=' "$REPO_ROOT/inc/forge/ansible.sh")" == 2 ]]
 
+FORGE_LAYOUT=antix
+prepared_command=""
+forge_in_chroot() {
+  prepared_command="$1"
+}
+forge_ansible_prepare_antix
+[[ "$prepared_command" == "getent group _ssh >/dev/null 2>&1 || groupadd --system _ssh" ]]
+
+FORGE_LAYOUT=single
+prepared_command=""
+forge_ansible_prepare_antix
+[[ -z "$prepared_command" ]]
+
 forge_in_chroot() {
   printf 'play #1 (local): p\tTAGS: []\n      TASK TAGS: [ai.local, plain]\n'
 }
