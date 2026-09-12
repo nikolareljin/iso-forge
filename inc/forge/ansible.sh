@@ -43,9 +43,11 @@ forge_ansible() {
   fi
 
   if [[ "$source" == "integration" ]]; then
+    local stage
+    stage=$(forge_tree_path "$rootfs" "$dest") || return $?
     [[ -n "$recipe_dir" ]] || { log_error "Integration source directory is missing"; return 2; }
     forge_in_chroot "rm -rf $(forge_q "$dest") && mkdir -p $(forge_q "$dest")" || return 1
-    rsync -a --delete --exclude .git "$recipe_dir/" "$rootfs$dest/" || return 1
+    rsync -a --delete --exclude .git "$recipe_dir/" "$stage/" || return 1
   else
     local clone="rm -rf $(forge_q "$dest") && git clone --depth 1"
     [[ -n "$ref" ]] && clone+=" --branch $(forge_q "$ref")"

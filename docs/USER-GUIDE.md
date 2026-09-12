@@ -80,6 +80,8 @@ Use a particular already-downloaded base image when needed:
 sudo ./forge --recipe recipes/example.yml --base-iso /path/to/base.iso
 ```
 
+If an image does not identify its architecture unambiguously, supply it explicitly; for example, use `--arch i386` for a 32-bit x86 base. IsoForge rejects an override that conflicts with a detected architecture.
+
 The output goes to `download_dir` unless `--output` specifies another directory. For recipe syntax and supported base-image layouts, see [BUILD.md](BUILD.md).
 
 ### NikOS image behavior

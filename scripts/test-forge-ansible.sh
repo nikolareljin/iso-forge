@@ -13,6 +13,8 @@ source "$REPO_ROOT/inc/forge/recipe.sh"
 # shellcheck source=/dev/null
 source "$REPO_ROOT/inc/forge/chroot.sh"
 # shellcheck source=/dev/null
+source "$REPO_ROOT/inc/forge/customize.sh"
+# shellcheck source=/dev/null
 source "$REPO_ROOT/inc/forge/ansible.sh"
 
 tmpdir=$(mktemp -d)
@@ -38,7 +40,7 @@ recipe_load "$tmpdir/ansible.yml"
 [[ "$(recipe_get '.ansible.extra_vars.feature_list | type')" == 'array' ]]
 [[ "$(recipe_get '.ansible.extra_vars.feature_map | type')" == 'object' ]]
 grep -Fq 'vars_json=$(jq -c --arg home "$skel_home"' "$REPO_ROOT/inc/forge/ansible.sh"
-grep -Fq "args+=(-e "\$vars_json")" "$REPO_ROOT/inc/forge/ansible.sh"
+grep -Fq 'args+=(-e "$vars_json")' "$REPO_ROOT/inc/forge/ansible.sh"
 [[ "$(grep -c 'export HOME=' "$REPO_ROOT/inc/forge/ansible.sh")" == 2 ]]
 
 FORGE_LAYOUT=antix
@@ -53,6 +55,11 @@ FORGE_LAYOUT=single
 prepared_command=""
 forge_ansible_prepare_antix
 [[ -z "$prepared_command" ]]
+mkdir -p "$tmpdir/rootfs/opt"
+[[ "$(forge_tree_path "$tmpdir/rootfs" /opt/integration)" == "$tmpdir/rootfs/opt/integration" ]]
+if forge_tree_path "$tmpdir/rootfs" /../../etc >/dev/null 2>&1; then exit 1; fi
+[[ "$(forge_tree_path "$tmpdir/rootfs" /)" == "$tmpdir/rootfs" ]]
+
 
 forge_in_chroot() {
   printf 'play #1 (local): p\tTAGS: []\n      TASK TAGS: [ai.local, plain]\n'

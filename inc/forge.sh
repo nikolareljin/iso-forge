@@ -6,6 +6,7 @@
 #       --integration PATH  Directory containing a consumer isoforge.yml.
 #       --integration-repo URL --ref SHA  Clone a pinned consumer integration.
 #       --base-iso PATH Override the recipe base with a local ISO.
+#       --arch ARCH      Expected base architecture when automatic detection is ambiguous.
 #   -o, --output DIR    Where to write the ISO. Defaults to download_dir from config.json.
 #       --config PATH   Override the config file the distro catalog is read from.
 #       --work-dir DIR  Scratch space for the build. Defaults to /var/tmp/isoforge.
@@ -57,6 +58,7 @@ WORK_DIR="${ISOFORGE_WORK_DIR:-/var/tmp/isoforge}"
 DRY_RUN=0
 SMOKE_TEST=0
 KEEP_WORK=0
+ARCH_OVERRIDE=""
 BASE_ISO_OVERRIDE=""
 
 usage() { display_help; }
@@ -69,6 +71,7 @@ parse_args() {
       --integration-repo) INTEGRATION_REPO="${2:-}"; shift 2 ;;
       --ref)         INTEGRATION_REF="${2:-}"; shift 2 ;;
       --base-iso)    BASE_ISO_OVERRIDE="${2:-}"; shift 2 ;;
+      --arch)        ARCH_OVERRIDE="${2:-}"; shift 2 ;;
       -o|--output)   OUTPUT_DIR="${2:-}"; shift 2 ;;
       # `isoforge build` forwards its arguments here, and `isoforge` documents
       # --config, so it has to mean the same thing on both sides.
@@ -103,6 +106,10 @@ parse_args() {
   fi
   if [[ -n "$BASE_ISO_OVERRIDE" && ! -f "${BASE_ISO_OVERRIDE/#\~/$HOME}" ]]; then
     log_error "Base ISO not found: $BASE_ISO_OVERRIDE"
+    exit 2
+  fi
+  if [[ -n "$ARCH_OVERRIDE" ]] && ! forge_arch_supported "$ARCH_OVERRIDE"; then
+    log_error "Unsupported architecture for --arch: $ARCH_OVERRIDE"
     exit 2
   fi
 }
@@ -230,7 +237,18 @@ main() {
   forge_verify_base "$FORGE_BASE_ISO" || exit $?
 
   forge_extract_iso "$FORGE_BASE_ISO" "$iso_dir" || exit $?
-  forge_check_arch "$(forge_detect_arch "$iso_dir" "$FORGE_BASE_ISO")" || exit $?
+  local detected_arch effective_arch
+  detected_arch=$(forge_detect_arch "$iso_dir" "$FORGE_BASE_ISO")
+  effective_arch="$detected_arch"
+  if [[ -n "$ARCH_OVERRIDE" ]]; then
+    if [[ -n "$detected_arch" && "$detected_arch" != "$ARCH_OVERRIDE" ]]; then
+      log_error "--arch $ARCH_OVERRIDE does not match the base image architecture: $detected_arch"
+      exit 2
+    fi
+    effective_arch="$ARCH_OVERRIDE"
+  fi
+  [[ -n "$effective_arch" ]] && log_info "Base architecture: $effective_arch"
+  forge_check_arch "$effective_arch" || exit $?
   forge_detect_layout "$iso_dir" || exit $?
   forge_prepare_root "$WORK_DIR" || exit $?
 
@@ -249,6 +267,7 @@ main() {
 
   # The manifest is read out of the chroot, so repack before leaving it.
   forge_repack "$WORK_DIR" "$rootfs" "$iso_dir" || exit $?
+  forge_live_overlay "$recipe_dir" "$iso_dir" || exit $?
   forge_chroot_leave
   forge_root_teardown "$rootfs"
 

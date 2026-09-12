@@ -70,6 +70,11 @@ forge_detect_arch() {
       return 0
     fi
   done
+  if [[ "$(basename -- "$iso_path")" =~ (^|[_-])386([_.-]|$) ]]; then
+    printf 'i386'
+    return 0
+  fi
+
   case "$text" in
     *x86_64*)  printf 'amd64' ;;
     *aarch64*) printf 'arm64' ;;
@@ -78,6 +83,13 @@ forge_detect_arch() {
 
 # Building for a different architecture than the host would need binfmt and a
 # static qemu in the chroot. Say so plainly rather than failing deep inside apt.
+forge_arch_supported() {
+  case "$1" in
+    amd64|arm64|i386|armhf|ppc64el|s390x|riscv64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 forge_check_arch() {
   local iso_arch="$1"
   local host_arch

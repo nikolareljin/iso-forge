@@ -70,7 +70,7 @@ over unchanged.
 An image with no `casper/` directory is refused, naming what was found. Arch is
 not supported: `archiso` shares nothing with casper and needs its own pipeline.
 
-Cross-architecture builds are refused rather than attempted. The architecture
+Cross-architecture builds are refused rather than attempted, except that an amd64 host can build an i386 image when its kernel provides 32-bit compatibility. The architecture
 is read from `.disk/info`, falling back to the image filename; when neither
 says, the check is skipped rather than guessed at.
 

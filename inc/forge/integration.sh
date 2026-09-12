@@ -6,7 +6,7 @@ INTEGRATION_DIR=""
 INTEGRATION_MANIFEST=""
 
 forge_integration_require_commit() {
-  [[ "$1" =~ ^[0-9a-fA-F]{40,64}$ ]]
+  [[ "$1" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]
 }
 
 forge_integration_checkout() {

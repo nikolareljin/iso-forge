@@ -59,6 +59,7 @@ cd "$ROOT_DIR"
 ./scripts/test-forge-distrodeck.sh
 ./scripts/test-forge-image.sh
 ./scripts/test-forge-nikos.sh
+./scripts/test-forge-integration.sh
 ./scripts/test-forge-ansible.sh
 ./scripts/test-rpm-manifest.sh
 

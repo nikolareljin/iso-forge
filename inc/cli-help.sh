@@ -83,6 +83,7 @@ Usage:
 Options:
   -r, --recipe PATH   Recipe to build. Required.
       --base-iso PATH Override the recipe base with a local ISO.
+      --arch ARCH      Expected base architecture when automatic detection is ambiguous.
   -o, --output DIR    Where to write the ISO. Defaults to download_dir from config.json.
       --config PATH   Override config file path.
       --work-dir DIR  Scratch space for build. Defaults to /var/tmp/isoforge.
