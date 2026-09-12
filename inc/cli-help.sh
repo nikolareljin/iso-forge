@@ -78,12 +78,28 @@ Build a custom installable ISO from a base image and a recipe.
 
 Usage:
   isoforge build --recipe PATH [OPTIONS]
+  isoforge build --integration PATH [OPTIONS]
+  isoforge build --integration-repo URL --ref SHA [OPTIONS]
   forge --recipe PATH [OPTIONS]
 
+Exactly one of --recipe, --integration or --integration-repo is required.
+A recipe is owned by this repository; an integration is owned by the
+consumer and lives in that project as isoforge.yml.
+
 Options:
-  -r, --recipe PATH   Recipe to build. Required.
+  -r, --recipe PATH   Recipe to build, from this repository.
+      --integration PATH
+                      Build from a consumer integration: a directory holding
+                      isoforge.yml, or the path to the manifest itself.
+      --integration-repo URL
+                      Clone a consumer integration and build from it.
+                      Requires --ref.
+      --ref SHA       The commit --integration-repo is built from. A full
+                      40- or 64-character SHA; branches and tags are refused
+                      so a build is reproducible.
       --base-iso PATH Override the recipe base with a local ISO.
-      --arch ARCH      Expected base architecture when automatic detection is ambiguous.
+      --arch ARCH     Expected base architecture when automatic detection is
+                      ambiguous.
   -o, --output DIR    Where to write the ISO. Defaults to download_dir from config.json.
       --config PATH   Override config file path.
       --work-dir DIR  Scratch space for build. Defaults to /var/tmp/isoforge.

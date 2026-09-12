@@ -71,3 +71,30 @@ fi
 if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'ai.*' >/dev/null 2>&1; then
   exit 1
 fi
+
+# A manifest that names no tags has nothing to verify and must stay a no-op:
+# the checks below make an unverifiable list fatal, and that must not turn
+# every recipe without tags into a failed build.
+forge_in_chroot() { echo "should not be reached" >&2; return 1; }
+forge_ansible_check_tags /opt/test site.yml inventory/local tags
+forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags
+
+# Both of these used to warn and return 0, so a build whose tags could not be
+# read looked exactly like one whose tags were all present. A skip_tags entry
+# that matches nothing keeps whatever it was meant to leave out, which is the
+# case the module's own comment calls the expensive one.
+forge_in_chroot() { return 1; }
+if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'plain' >/dev/null 2>&1; then
+  echo "built on an unreadable tag list" >&2
+  exit 1
+fi
+if forge_ansible_check_tags /opt/test site.yml inventory/local tags 'plain' >/dev/null 2>&1; then
+  echo "built on an unreadable tag list" >&2
+  exit 1
+fi
+
+forge_in_chroot() { printf 'play #1 (local): p\tTAGS: []\n'; }
+if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'plain' >/dev/null 2>&1; then
+  echo "built against a playbook that defines no tags" >&2
+  exit 1
+fi

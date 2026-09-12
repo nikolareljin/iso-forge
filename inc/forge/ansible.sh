@@ -130,10 +130,24 @@ forge_ansible_check_tags() {
   local -a wanted=("$@")
   ((${#wanted[@]})) || return 0
 
+  # Both ways out of this used to be `log_warn` and `return 0`, which made the
+  # comment above false: when the tags could not be read, neither field was
+  # checked and neither was fatal, and the build carried on looking exactly as
+  # it does when both lists were verified. The expensive case the comment
+  # names -- a skip that matches nothing, so the build silently keeps what it
+  # was told to leave out -- passed straight through.
+  #
+  # The early return above means we are only here because the manifest named
+  # tags. Not being able to check them is not the same as their being fine.
   local listing
-  if ! listing=$(forge_in_chroot "cd $(forge_q "$dest") && ansible-playbook $(forge_q "$playbook") -i $(forge_q "$inventory") --connection=local --list-tags 2>/dev/null"); then
-    log_warn "Could not list the playbook's tags; ansible.$field is not being checked."
-    return 0
+  # stderr is deliberately not discarded: when this fails, why it failed is
+  # the only useful thing to say, and it went to /dev/null.
+  if ! listing=$(forge_in_chroot "cd $(forge_q "$dest") && ansible-playbook $(forge_q "$playbook") -i $(forge_q "$inventory") --connection=local --list-tags"); then
+    log_error "Could not list the playbook's tags, so ansible.$field cannot be checked."
+    log_error "ansible.$field names: ${wanted[*]}"
+    log_error "The playbook's own error is above. Refusing to build against an"
+    log_error "unverified tag list."
+    return 2
   fi
 
   # ansible prints "TASK TAGS: [a, b, c]", sometimes more than once.
@@ -143,8 +157,10 @@ forge_ansible_check_tags() {
     | tr ',' '\n' | tr -d ' ' | sort -u)
 
   if [[ -z "$available" ]]; then
-    log_warn "The playbook reported no tags; ansible.$field is not being checked."
-    return 0
+    log_error "The playbook defines no tags, but ansible.$field names: ${wanted[*]}"
+    log_error "Roles carried in a playbook without a tags: key cannot be selected"
+    log_error "or skipped by name."
+    return 2
   fi
 
   local missing=() t

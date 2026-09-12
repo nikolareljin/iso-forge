@@ -12,4 +12,4 @@ jobs:
       # xorriso and squashfs-tools; without them those tests skip rather than
       # fail, which would hide a real regression. python3-yaml is what reads a
       # recipe, so the recipe tests need it to exercise anything at all.
-      test_command: "git submodule update --init --recursive && sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends xorriso squashfs-tools python3-yaml && ./scripts/test-forge-recipe.sh && ./scripts/test-forge-distrodeck.sh && ./scripts/test-forge-image.sh && ./scripts/test-forge-nikos.sh"
+      test_command: "git submodule update --init --recursive && sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends xorriso squashfs-tools python3-yaml && ./scripts/test-ci-runs-the-forge-tests.sh && ./scripts/test-forge-recipe.sh && ./scripts/test-forge-distrodeck.sh && ./scripts/test-forge-image.sh && ./scripts/test-forge-nikos.sh && ./scripts/test-forge-integration.sh && ./scripts/test-forge-ansible.sh"

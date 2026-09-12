@@ -62,3 +62,52 @@ if forge_integration_load "$tmpdir/invalid.yml" >/dev/null 2>&1; then
   echo "accepted an unsupported manifest schema" >&2
   exit 1
 fi
+
+# The guards in forge_integration_load, each proved to fail. Only the schema
+# check above had ever been exercised, so the other four were assertions
+# nothing had confirmed could fire -- a manifest missing its id, its playbook
+# declaration, or the playbook file itself would have been caught by nothing
+# in this suite.
+# Each case asserts the message its own guard emits, not merely that the load
+# failed. Written the loose way first, three of these four passed with the
+# guard deleted: a manifest with no id is refused a step later by
+# recipe_validate, one with no playbook key by the playbook-exists check, and a
+# missing file by recipe_to_json. All still refused, none by the guard the test
+# named -- so the guard could have been removed and the suite stayed green.
+refuses() {
+  local why="$1" expected="$2" path="$3" output
+  if output=$(forge_integration_load "$path" 2>&1); then
+    echo "accepted a manifest that $why" >&2
+    exit 1
+  fi
+  if ! grep -qF -- "$expected" <<<"$output"; then
+    echo "a manifest that $why was refused, but not by the guard for it" >&2
+    echo "  expected to see: $expected" >&2
+    echo "  got: $output" >&2
+    exit 1
+  fi
+}
+
+sed '/^integration:$/,+1d' "$tmpdir/isoforge.yml" >"$tmpdir/no-id.yml"
+refuses "declares no integration.id" \
+  "Integration manifest requires integration.id" "$tmpdir/no-id.yml"
+
+sed '/^    playbook: /d' "$tmpdir/isoforge.yml" >"$tmpdir/no-playbook.yml"
+refuses "declares no provisioning.ansible.playbook" \
+  "Integration manifest requires provisioning.ansible.playbook" "$tmpdir/no-playbook.yml"
+
+mkdir -p "$tmpdir/absent"
+sed 's|playbook: playbooks/site.yml|playbook: playbooks/missing.yml|' \
+  "$tmpdir/isoforge.yml" >"$tmpdir/absent/isoforge.yml"
+refuses "names a playbook that is not in the tree" \
+  "Integration playbook not found" "$tmpdir/absent"
+
+refuses "does not exist" \
+  "Integration manifest not found" "$tmpdir/nowhere/isoforge.yml"
+
+# The happy path still loads after all of the above, so a guard that started
+# rejecting everything would show up here rather than as a silent pass.
+forge_integration_load "$tmpdir"
+[[ "$(recipe_get '.recipe')" == 'manifest-regression' ]]
+
+echo "integration manifest checks passed."

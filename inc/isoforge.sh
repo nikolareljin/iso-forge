@@ -7,7 +7,7 @@
 # PARAMETERS:
 #   download        Download one or more ISOs from config.json. Options: --config PATH, -h, --help.
 #   burn            Prepare a Ventoy drive and copy selected ISO files to it. Options: --config PATH, -h, --help.
-#   build           Build a custom installable ISO from a recipe. Options: -r/--recipe PATH, --base-iso PATH, --arch ARCH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
+#   build           Build a custom installable ISO from a recipe or a consumer integration. Options: -r/--recipe PATH, --integration PATH, --integration-repo URL, --ref SHA, --base-iso PATH, --arch ARCH, -o/--output DIR, --config PATH, --work-dir DIR, --dry-run, --smoke-test, --keep, --version, -h/--help.
 #   setup           Install project dependencies. Parameters: PACKAGE. Options: -h, --help.
 #   help [COMMAND]  Show top-level help or command help for download, burn, build, or setup.
 #   --config PATH   Override config file path for the TUI flow.
