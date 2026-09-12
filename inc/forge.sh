@@ -265,7 +265,10 @@ main() {
   forge_customize "$recipe_dir" "$rootfs" || exit $?
   forge_chroot_cleanup
 
-  # The manifest is read out of the chroot, so repack before leaving it.
+  # The manifest is read out of the chroot, but virtual filesystems must not
+  # be visible to mksquashfs. The chroot directory remains available for the
+  # manifest query after its /proc, /sys, /dev and /run mounts have gone.
+  forge_chroot_unmount_mounts
   forge_repack "$WORK_DIR" "$rootfs" "$iso_dir" || exit $?
   forge_live_overlay "$recipe_dir" "$iso_dir" || exit $?
   forge_chroot_leave

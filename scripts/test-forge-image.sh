@@ -376,6 +376,13 @@ if [[ -n "$cleanup_line" && -n "$repack_line" ]] && (( cleanup_line < repack_lin
 else
   bad "the chroot is cleaned before the filesystem is squashed"
 fi
+unmount_line=$(grep -n "^  forge_chroot_unmount_mounts$" "$REPO_ROOT/inc/forge.sh" | head -1 | cut -d: -f1)
+if [[ -n "$unmount_line" && -n "$repack_line" ]] && (( unmount_line < repack_line )); then
+  ok "virtual chroot filesystems are unmounted before repacking"
+else
+  bad "virtual chroot filesystems are unmounted before repacking"
+fi
+
 if grep -q 'forge_chroot_unscaffold' "$REPO_ROOT/inc/forge/chroot.sh"; then
   ok "cleanup removes the build's own scaffolding"
 else

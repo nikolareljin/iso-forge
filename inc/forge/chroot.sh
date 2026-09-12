@@ -48,14 +48,7 @@ forge_chroot_enter() {
   chmod 0755 "$FORGE_POLICY_RC"
 }
 
-forge_chroot_leave() {
-  local rootfs="${FORGE_CHROOT_DIR:-}"
-  [[ -n "$rootfs" ]] || return 0
-
-  # Normally already done by forge_chroot_cleanup, before the repack. Repeated
-  # here for the path where a build failed before reaching it.
-  forge_chroot_unscaffold
-
+forge_chroot_unmount_mounts() {
   local i
   for ((i = ${#FORGE_CHROOT_MOUNTS[@]} - 1; i >= 0; i--)); do
     umount -R "${FORGE_CHROOT_MOUNTS[i]}" 2>/dev/null \
@@ -63,6 +56,17 @@ forge_chroot_leave() {
       || log_warn "Could not unmount ${FORGE_CHROOT_MOUNTS[i]}"
   done
   FORGE_CHROOT_MOUNTS=()
+}
+
+
+forge_chroot_leave() {
+  local rootfs="${FORGE_CHROOT_DIR:-}"
+
+  # Normally already done by forge_chroot_cleanup, before the repack. Repeated
+  # here for the path where a build failed before reaching it.
+  forge_chroot_unscaffold
+
+  forge_chroot_unmount_mounts
   FORGE_CHROOT_DIR=""
 }
 
