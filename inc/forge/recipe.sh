@@ -45,11 +45,11 @@ recipe_base_is_compatible() {
   local -a patterns=()
   mapfile -t patterns < <(recipe_list '.compatibility.base_filename_patterns')
   [[ ${#patterns[@]} -gt 0 ]] || return 0
-  # Strip a query string first: forge_resolve_base caches the download as
-  # basename "${url%%\?*}" (inc/forge/fetch.sh), so a supported URL ending
-  # "...iso?download=1" must be matched on "...iso" or dry-run and build
-  # disagree about the same base.
-  base_name=$(basename -- "${base_path%%\?*}")
+  # Strip a query string and a SourceForge-style trailing /download endpoint,
+  # so dry-run, cache naming, and real builds all use the actual ISO filename.
+  base_path="${base_path%%\?*}"
+  base_name=$(basename -- "$base_path")
+  [[ "$base_name" == "download" && "$base_path" == */download ]] && base_name=$(basename -- "$(dirname -- "$base_path")")
   # compatibility.base_filename_patterns uses POSIX extended regular
   # expressions. The interactive ISO creator uses the same dialect.
   for pattern in "${patterns[@]}"; do

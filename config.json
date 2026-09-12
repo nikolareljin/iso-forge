@@ -63,14 +63,14 @@
       "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-core.iso/download"
     },
     {
-      "id": "antiX_23_x64_full",
-      "label": "antiX 23 Full — Intel/AMD 64-bit (x86_64)",
-      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-23/antiX-23_x64-full.iso/download"
+      "id": "antiX_26_x64_full",
+      "label": "antiX 26 Full — Intel/AMD 64-bit (x86_64)",
+      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_x64-full.iso/download"
     },
     {
-      "id": "antiX_23_i386_full",
-      "label": "antiX 23 Full — Intel/AMD 32-bit (i386)",
-      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-23/antiX-23_386-full.iso/download"
+      "id": "antiX_26_i386_full",
+      "label": "antiX 26 Full — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-full.iso/download"
     },
     {
       "id": "Fedora_41_Workstation_x86_64",

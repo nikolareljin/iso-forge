@@ -16,6 +16,8 @@ shlib_import logging
 source "$REPO_ROOT/inc/forge/yaml.sh"
 # shellcheck source=/dev/null
 source "$REPO_ROOT/inc/forge/recipe.sh"
+# shellcheck source=/dev/null
+source "$REPO_ROOT/inc/forge/fetch.sh"
 
 CONFIG_FILE="$REPO_ROOT/config.json"
 TMP="$(mktemp -d)"
@@ -302,6 +304,25 @@ if recipe_base_is_compatible 'https://example.invalid/xubuntu-24.04.4-desktop-am
   ok "a query string does not hide the filename"
 else
   bad "a query string does not hide the filename"
+fi
+
+# --- SourceForge download endpoints preserve the ISO filename ----------------
+check "a SourceForge download endpoint yields its ISO filename" \
+  "$(forge_base_filename 'https://sourceforge.net/projects/example/files/image.iso/download')" "image.iso"
+printf "%s\n" \
+  "recipe: sourceforge-compatible" \
+  "base:" \
+  "  url: https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-core.iso/download" \
+  "compatibility:" \
+  "  base_filename_patterns:" \
+  "    - '^antiX-26_386-core\\.iso$'" \
+  "output:" \
+  "  name: sourceforge-compatible" >"$TMP/sourceforge-compatible.yml"
+recipe_load "$TMP/sourceforge-compatible.yml" >/dev/null
+if recipe_base_is_compatible "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-core.iso/download"; then
+  ok "a SourceForge download endpoint matches compatibility rules"
+else
+  bad "a SourceForge download endpoint matches compatibility rules"
 fi
 
 # --- a browser-only catalog entry is not a builder base ---------------------

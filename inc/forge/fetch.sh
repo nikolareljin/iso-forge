@@ -16,6 +16,17 @@ forge_catalog_ids() {
   jq -r '.distros[].id' "$CONFIG_FILE"
 }
 
+# Returns the actual ISO filename for direct URLs and SourceForge-style
+# .../image.iso/download endpoints.
+forge_base_filename() {
+  local source="${1%%\?*}" name
+  name=$(basename -- "$source")
+  if [[ "$name" == "download" && "$source" == */download ]]; then
+    name=$(basename -- "$(dirname -- "$source")")
+  fi
+  printf "%s\n" "$name"
+}
+
 # Downloads reuse the tracked downloader the interactive flows use, so a
 # failure lands in the same session state and log the TUI already reports.
 forge_download() {
@@ -81,7 +92,7 @@ forge_resolve_base() {
   fi
 
   mkdir -p "$cache_dir"
-  FORGE_BASE_ISO="$cache_dir/$(basename "${url%%\?*}")"
+  FORGE_BASE_ISO="$cache_dir/$(forge_base_filename "$url")"
   forge_download "$url" "$FORGE_BASE_ISO" || return $?
 }
 
