@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning when applicable.
 
+## 2026-09-13 — 2.2.1
+
+### Fixed
+- **The tag check could not load the playbook's collections, so every build that names `ansible.tags` failed.** `ansible-galaxy` installed collections under `skel_home` (`/etc/skel/.ansible`), and the playbook run looked there too, but `--list-tags` ran without that `HOME` and looked in `/root/.ansible`. The NikOS build stopped with `couldn't resolve module/action 'community.general.timezone'` followed by "Could not list the playbook's tags". Both halves arrived in the same unreleased change: moving the galaxy install to `skel_home` left the listing behind, and making an unreadable tag list fatal turned what had been a skipped check into a failed build. All three ansible commands now take their `HOME` and working directory from one `forge_ansible_prefix`, so none of them can leave it out.
+- **The regression test for `HOME` counted strings instead of checking commands.** `scripts/test-forge-ansible.sh` asserted that `export HOME=` appeared twice in the source, which stayed true while the tag listing ran without it. It now stubs the chroot, runs the provisioning step, and requires every `ansible-galaxy` and `ansible-playbook` command sent to start with `HOME` set to `skel_home`. Reverting the fix makes it fail on the tag listing.
+
 ## 2026-09-10 — 2.2.0
 
 ### Added
