@@ -13,6 +13,8 @@ source "$REPO_ROOT/inc/forge/recipe.sh"
 # shellcheck source=/dev/null
 source "$REPO_ROOT/inc/forge/chroot.sh"
 # shellcheck source=/dev/null
+source "$REPO_ROOT/inc/forge/customize.sh"
+# shellcheck source=/dev/null
 source "$REPO_ROOT/inc/forge/ansible.sh"
 
 tmpdir=$(mktemp -d)
@@ -38,8 +40,26 @@ recipe_load "$tmpdir/ansible.yml"
 [[ "$(recipe_get '.ansible.extra_vars.feature_list | type')" == 'array' ]]
 [[ "$(recipe_get '.ansible.extra_vars.feature_map | type')" == 'object' ]]
 grep -Fq 'vars_json=$(jq -c --arg home "$skel_home"' "$REPO_ROOT/inc/forge/ansible.sh"
-grep -Fq "args+=(-e "\$vars_json")" "$REPO_ROOT/inc/forge/ansible.sh"
+grep -Fq 'args+=(-e "$vars_json")' "$REPO_ROOT/inc/forge/ansible.sh"
 [[ "$(grep -c 'export HOME=' "$REPO_ROOT/inc/forge/ansible.sh")" == 2 ]]
+
+FORGE_LAYOUT=antix
+prepared_command=""
+forge_in_chroot() {
+  prepared_command="$1"
+}
+forge_ansible_prepare_antix
+[[ "$prepared_command" == "getent group _ssh >/dev/null 2>&1 || groupadd --system _ssh" ]]
+
+FORGE_LAYOUT=single
+prepared_command=""
+forge_ansible_prepare_antix
+[[ -z "$prepared_command" ]]
+mkdir -p "$tmpdir/rootfs/opt"
+[[ "$(forge_tree_path "$tmpdir/rootfs" /opt/integration)" == "$tmpdir/rootfs/opt/integration" ]]
+if forge_tree_path "$tmpdir/rootfs" /../../etc >/dev/null 2>&1; then exit 1; fi
+[[ "$(forge_tree_path "$tmpdir/rootfs" /)" == "$tmpdir/rootfs" ]]
+
 
 forge_in_chroot() {
   printf 'play #1 (local): p\tTAGS: []\n      TASK TAGS: [ai.local, plain]\n'
@@ -49,5 +69,32 @@ if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'ai-loc
   exit 1
 fi
 if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'ai.*' >/dev/null 2>&1; then
+  exit 1
+fi
+
+# A manifest that names no tags has nothing to verify and must stay a no-op:
+# the checks below make an unverifiable list fatal, and that must not turn
+# every recipe without tags into a failed build.
+forge_in_chroot() { echo "should not be reached" >&2; return 1; }
+forge_ansible_check_tags /opt/test site.yml inventory/local tags
+forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags
+
+# Both of these used to warn and return 0, so a build whose tags could not be
+# read looked exactly like one whose tags were all present. A skip_tags entry
+# that matches nothing keeps whatever it was meant to leave out, which is the
+# case the module's own comment calls the expensive one.
+forge_in_chroot() { return 1; }
+if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'plain' >/dev/null 2>&1; then
+  echo "built on an unreadable tag list" >&2
+  exit 1
+fi
+if forge_ansible_check_tags /opt/test site.yml inventory/local tags 'plain' >/dev/null 2>&1; then
+  echo "built on an unreadable tag list" >&2
+  exit 1
+fi
+
+forge_in_chroot() { printf 'play #1 (local): p\tTAGS: []\n'; }
+if forge_ansible_check_tags /opt/test site.yml inventory/local skip_tags 'plain' >/dev/null 2>&1; then
+  echo "built against a playbook that defines no tags" >&2
   exit 1
 fi

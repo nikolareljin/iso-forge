@@ -46,6 +46,14 @@ forge_detect_layout() {
   FORGE_LAYER_PATHS=()
   FORGE_TOP_LAYER=""
 
+  if [[ -f "$iso_dir/antiX/linuxfs" ]]; then
+    FORGE_LAYOUT="antix"
+    FORGE_LAYER_PATHS=("$iso_dir/antiX/linuxfs")
+    FORGE_TOP_LAYER="$iso_dir/antiX/linuxfs"
+    log_info "Layout: antiX live filesystem (antiX/linuxfs)"
+    return 0
+  fi
+
   if [[ ! -d "$casper" ]]; then
     log_error "No casper/ directory in the base image."
     log_error "isoforge remasters Debian-family live images (Ubuntu, Xubuntu, Debian live)."
@@ -127,7 +135,7 @@ forge_prepare_root() {
   local rootfs="$work/rootfs"
 
   case "$FORGE_LAYOUT" in
-    single)
+    single|antix)
       log_info "Unpacking root filesystem (this takes a few minutes)"
       rm -rf "$rootfs"
       if ! unsquashfs -d "$rootfs" "$FORGE_TOP_LAYER" >/dev/null; then

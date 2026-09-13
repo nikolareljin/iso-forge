@@ -55,13 +55,6 @@ forge_set_volume_id() {
   done
 }
 
-forge_disk_info() {
-  local iso_dir="$1" label="$2"
-  [[ -n "$label" ]] || return 0
-  mkdir -p "$iso_dir/.disk"
-  printf '%s\n' "$label" >"$iso_dir/.disk/info"
-}
-
 # md5sum.txt is what the "Check disc for defects" boot entry verifies. Leaving
 # the original there guarantees that check fails on every rebuilt image.
 forge_checksums() {
@@ -71,6 +64,8 @@ forge_checksums() {
   log_info "Regenerating md5sum.txt"
   ( cd "$iso_dir" && find . -type f \
       ! -name md5sum.txt \
+      ! -name md5sum.txt.new \
+      ! -path './boot.catalog' \
       ! -path './isolinux/boot.cat' \
       -print0 | sort -z | xargs -0 md5sum >md5sum.txt.new ) || {
     log_error "Could not regenerate md5sum.txt"
@@ -168,7 +163,10 @@ forge_finalize_tree() {
   local old_label=""
   [[ -n "$base_iso" ]] && old_label="$(forge_base_volume_id "$base_iso")"
 
-  forge_disk_info "$iso_dir" "$label"
+  # .disk/info is vendor release metadata, not an ISO label. Subiquity reads
+  # its release field while choosing an installer refresh channel; replacing it
+  # with a one-word volume id crashes the installer before its first screen.
+  # The volume id is set by forge_pack instead.
   forge_set_volume_id "$iso_dir" "$old_label" "$label"
   forge_checksums "$iso_dir" || return $?
 }

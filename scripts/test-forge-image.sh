@@ -45,18 +45,25 @@ make_base() {
   local layout="$1"
   local root="$TMP/$layout"
   rm -rf "$root"
-  mkdir -p "$root/tree/casper" "$root/tree/.disk" "$root/rootfs/etc" "$root/rootfs/usr/bin"
+  mkdir -p "$root/tree/.disk" "$root/rootfs/etc" "$root/rootfs/usr/bin"
 
   printf 'synthetic\n' >"$root/rootfs/etc/os-release"
   printf 'placeholder\n' >"$root/rootfs/usr/bin/true-ish"
-  printf 'base image\n' >"$root/tree/.disk/info"
+  printf 'Synthetic 24.04 release amd64\n' >"$root/tree/.disk/info"
   printf 'nothing here\n' >"$root/tree/README.diskdefines"
 
   case "$layout" in
     single)
+      mkdir -p "$root/tree/casper"
       mksquashfs "$root/rootfs" "$root/tree/casper/filesystem.squashfs" -noappend -quiet >/dev/null
       ;;
+    antix)
+      mkdir -p "$root/tree/antiX"
+      mksquashfs "$root/rootfs" "$root/tree/antiX/linuxfs" -noappend -quiet >/dev/null
+      ( cd "$root/tree/antiX" && md5sum linuxfs > linuxfs.md5 )
+      ;;
     layered)
+      mkdir -p "$root/tree/casper"
       mkdir -p "$root/lower2"
       printf 'standard layer\n' >"$root/lower2/marker"
       mksquashfs "$root/rootfs" "$root/tree/casper/minimal.squashfs" -noappend -quiet >/dev/null
@@ -139,7 +146,7 @@ before=$(md5sum "$work/iso/md5sum.txt" | awk '{print $1}')
 forge_finalize_tree "$work/iso" "REBUILT" "$base" >/dev/null 2>&1
 after=$(md5sum "$work/iso/md5sum.txt" | awk '{print $1}')
 if [[ "$before" != "$after" ]]; then ok "md5sum.txt is regenerated"; else bad "md5sum.txt is regenerated"; fi
-check ".disk/info carries the new label" "$(cat "$work/iso/.disk/info")" "REBUILT"
+check ".disk/info keeps the base release metadata" "$(cat "$work/iso/.disk/info")" "Synthetic 24.04 release amd64"
 
 out="$work/out.iso"
 if forge_pack "$work/iso" "$base" "$out" "REBUILT" >/dev/null 2>&1; then
@@ -155,8 +162,40 @@ fi
 volid=$(xorriso -indev "$out" -pvd_info 2>&1 | sed -n "s/^Volume id *: *'\(.*\)'$/\1/p" | head -1)
 check "the volume id is applied" "$volid" "REBUILT"
 
+if grep -qE 'md5sum\.txt\.new|\./boot\.catalog|\./isolinux/boot\.cat' "$work/iso/md5sum.txt"; then
+  bad "md5sum.txt excludes generated files"
+else
+  ok "md5sum.txt excludes generated files"
+fi
+
 if forge_verify "$out" >/dev/null 2>&1; then ok "the built image verifies"; else bad "the built image verifies"; fi
 check "a checksum file is written alongside" "$([[ -f "$out.sha256" ]] && echo yes || echo no)" "yes"
+
+# --- antiX layout ----------------------------------------------------------
+base_antix=$(make_base antix)
+work_antix="$TMP/work-antix"
+mkdir -p "$work_antix"
+forge_extract_iso "$base_antix" "$work_antix/iso" >/dev/null 2>&1
+forge_detect_layout "$work_antix/iso" >/dev/null 2>&1
+check "antiX linuxfs is detected as 'antix'" "$FORGE_LAYOUT" "antix"
+if forge_prepare_root "$work_antix" >/dev/null 2>&1; then
+  ok "the antiX root filesystem unpacks"
+else
+  bad "the antiX root filesystem unpacks"
+fi
+printf 'antiX change\n' >"$work_antix/rootfs/etc/isoforge-marker"
+if forge_repack "$work_antix" "$work_antix/rootfs" "$work_antix/iso" >/dev/null 2>&1; then
+  ok "the antiX root filesystem repacks"
+else
+  bad "the antiX root filesystem repacks"
+fi
+unsquashfs -d "$work_antix/verify" "$work_antix/iso/antiX/linuxfs" >/dev/null 2>&1 || true
+check "the antiX change survives the repack" "$(cat "$work_antix/verify/etc/isoforge-marker" 2>/dev/null)" "antiX change"
+if ( cd "$work_antix/iso/antiX" && md5sum -c linuxfs.md5 >/dev/null 2>&1 ); then
+  ok "antiX linuxfs.md5 is regenerated"
+else
+  bad "antiX linuxfs.md5 is regenerated"
+fi
 
 # --- layered layout ---------------------------------------------------------
 base2=$(make_base layered)
@@ -266,6 +305,9 @@ printf 'Xubuntu 24.04.4 LTS "Noble Numbat" - Release amd64 (20250101)\n' >"$TMP/
 check "the architecture is read from .disk/info" "$(forge_detect_arch "$TMP/arch" /tmp/whatever.iso)" "amd64"
 rm -f "$TMP/arch/.disk/info"
 check "the architecture falls back to the filename" "$(forge_detect_arch "$TMP/arch" /tmp/thing-arm64.iso)" "arm64"
+check "antiX 386 filenames are detected as i386" "$(forge_detect_arch "$TMP/arch" /tmp/antiX-26_386-core.iso)" "i386"
+check "known architectures are accepted for --arch" "$(forge_arch_supported i386 && echo yes || echo no)" "yes"
+check "unknown architectures are rejected for --arch" "$(forge_arch_supported mystery && echo yes || echo no)" "no"
 check "an unknown architecture reads as empty" "$(forge_detect_arch "$TMP/arch" /tmp/mystery.iso)" ""
 
 # xorriso's report contains `-e '--interval:...'` for the EFI boot image, and a
@@ -334,6 +376,13 @@ if [[ -n "$cleanup_line" && -n "$repack_line" ]] && (( cleanup_line < repack_lin
 else
   bad "the chroot is cleaned before the filesystem is squashed"
 fi
+unmount_line=$(grep -n "^  forge_chroot_unmount_mounts$" "$REPO_ROOT/inc/forge.sh" | head -1 | cut -d: -f1)
+if [[ -n "$unmount_line" && -n "$repack_line" ]] && (( unmount_line < repack_line )); then
+  ok "virtual chroot filesystems are unmounted before repacking"
+else
+  bad "virtual chroot filesystems are unmounted before repacking"
+fi
+
 if grep -q 'forge_chroot_unscaffold' "$REPO_ROOT/inc/forge/chroot.sh"; then
   ok "cleanup removes the build's own scaffolding"
 else

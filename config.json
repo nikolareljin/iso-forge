@@ -8,6 +8,141 @@
       "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-desktop-amd64.iso"
     },
     {
+      "id": "Ubuntu_26_04_1_desktop_amd64",
+      "label": "Ubuntu 26.04.1 LTS Desktop — Intel/AMD 64-bit (amd64)",
+      "url": "https://releases.ubuntu.com/26.04/ubuntu-26.04.1-desktop-amd64.iso"
+    },
+    {
+      "id": "Xubuntu_24_04_4_desktop_amd64",
+      "label": "Xubuntu 24.04.4 LTS Desktop — Intel/AMD 64-bit (amd64)",
+      "url": "https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
+    },
+    {
+      "id": "Xubuntu_26_04_1_desktop_amd64",
+      "label": "Xubuntu 26.04.1 LTS Desktop — Intel/AMD 64-bit (amd64)",
+      "url": "https://cdimage.ubuntu.com/xubuntu/releases/26.04/release/xubuntu-26.04.1-desktop-amd64.iso"
+    },
+    {
+      "id": "Ubuntu_Studio_24_04_3_amd64",
+      "label": "Ubuntu Studio 24.04.3 — Intel/AMD 64-bit (amd64)",
+      "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/24.04.3/release/ubuntustudio-24.04.3-dvd-amd64.iso"
+    },
+    {
+      "id": "LinuxMint_22_Cinnamon_amd64",
+      "label": "Linux Mint 22 Cinnamon — Intel/AMD 64-bit (amd64)",
+      "url": "https://mirrors.edge.kernel.org/linuxmint/stable/22/linuxmint-22-cinnamon-64bit.iso"
+    },
+    {
+      "id": "Debian_13_1_netinst_amd64",
+      "label": "Debian 13.1 netinst — Intel/AMD 64-bit (amd64)",
+      "url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.1.0-amd64-netinst.iso"
+    },
+    {
+      "id": "Debian_13_1_netinst_arm64",
+      "label": "Debian 13.1 netinst — ARM64 (aarch64)",
+      "url": "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-13.1.0-arm64-netinst.iso"
+    },
+    {
+      "id": "Debian_12_7_netinst_i386",
+      "label": "Debian 12.7 netinst — Intel/AMD 32-bit (i386)",
+      "url": "https://cdimage.debian.org/cdimage/archive/12.7.0/i386/iso-cd/debian-12.7.0-i386-netinst.iso"
+    },
+    {
+      "id": "MX_Linux_23_1_x64",
+      "label": "MX Linux 23.1 — Intel/AMD 64-bit (x86_64)",
+      "url": "https://sourceforge.net/projects/mx-linux/files/Final/MX-23.1/MX-23.1_x64.iso/download"
+    },
+    {
+      "id": "MX_Linux_23_1_i386",
+      "label": "MX Linux 23.1 — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/mx-linux/files/Final/MX-23.1/MX-23.1_386.iso/download"
+    },
+    {
+      "id": "antiX_26_i386_core",
+      "label": "antiX 26 Core — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-core.iso/download"
+    },
+    {
+      "id": "antiX_26_x64_full",
+      "label": "antiX 26 Full — Intel/AMD 64-bit (x86_64)",
+      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_x64-full.iso/download"
+    },
+    {
+      "id": "antiX_26_i386_full",
+      "label": "antiX 26 Full — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-26/antiX-26_386-full.iso/download"
+    },
+    {
+      "id": "Fedora_41_Workstation_x86_64",
+      "label": "Fedora 41 Workstation — Intel/AMD 64-bit (x86_64)",
+      "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-41-1.4.iso"
+    },
+    {
+      "id": "Fedora_41_Workstation_aarch64",
+      "label": "Fedora 41 Workstation — ARM64 (aarch64)",
+      "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/aarch64/iso/Fedora-Workstation-Live-aarch64-41-1.4.iso"
+    },
+    {
+      "id": "openSUSE_Leap_15_6_x86_64",
+      "label": "openSUSE Leap 15.6 DVD — Intel/AMD 64-bit (x86_64)",
+      "url": "https://download.opensuse.org/distribution/leap/15.6/iso/openSUSE-Leap-15.6-DVD-x86_64-Media.iso"
+    },
+    {
+      "id": "openSUSE_Leap_15_6_aarch64",
+      "label": "openSUSE Leap 15.6 DVD — ARM64 (aarch64)",
+      "url": "https://download.opensuse.org/ports/aarch64/distribution/leap/15.6/iso/openSUSE-Leap-15.6-DVD-aarch64-Media.iso"
+    },
+    {
+      "id": "Arch_Linux_latest_x86_64",
+      "label": "Arch Linux (latest) — Intel/AMD 64-bit (x86_64)",
+      "url": "https://mirror.rackspace.com/archlinux/iso/latest/archlinux-x86_64.iso"
+    },
+    {
+      "id": "Kali_2025_2_amd64_installer",
+      "label": "Kali Linux 2025.2 Installer — Intel/AMD 64-bit (amd64)",
+      "url": "https://cdimage.kali.org/kali-2025.2/kali-linux-2025.2-installer-amd64.iso"
+    },
+    {
+      "id": "ParrotOS_5_2_amd64",
+      "label": "Parrot OS 5.2 Security — Intel/AMD 64-bit (amd64)",
+      "url": "https://download.parrot.sh/parrot/iso/5.2/Parrot-security-5.2_amd64.iso"
+    },
+    {
+      "id": "ParrotOS_5_2_arm64",
+      "label": "Parrot OS 5.2 Security — ARM64 (aarch64)",
+      "url": "https://download.parrot.sh/parrot/iso/5.2/Parrot-security-5.2_arm64.iso"
+    },
+    {
+      "id": "Bodhi_Linux_6_0_0_64",
+      "label": "Bodhi Linux 6.0.0 — Intel/AMD 64-bit (x86_64)",
+      "url": "https://sourceforge.net/projects/bodhilinux/files/6.0.0/bodhi-6.0.0-64.iso/download"
+    },
+    {
+      "id": "Bodhi_Linux_5_1_0_32",
+      "label": "Bodhi Linux 5.1.0 — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/bodhilinux/files/5.1.0/bodhi-5.1.0-32.iso/download"
+    },
+    {
+      "id": "Q4OS_5_2_x64",
+      "label": "Q4OS 5.2 — Intel/AMD 64-bit (x86_64)",
+      "url": "https://sourceforge.net/projects/q4os/files/stable/q4os-5.2-x64.r1.iso/download"
+    },
+    {
+      "id": "Q4OS_5_2_i386",
+      "label": "Q4OS 5.2 — Intel/AMD 32-bit (i386)",
+      "url": "https://sourceforge.net/projects/q4os/files/stable/q4os-5.2-i386.r1.iso/download"
+    },
+    {
+      "id": "TinyCore_15_i386",
+      "label": "TinyCore 15 — Intel/AMD 32-bit (i386)",
+      "url": "http://tinycorelinux.net/15.x/x86/release/TinyCore-15.0.iso"
+    },
+    {
+      "id": "NixOS_24_05_GNOME_x86_64",
+      "label": "NixOS 24.05 GNOME — Intel/AMD 64-bit (x86_64, Surface-friendly, .iso)",
+      "url": "https://channels.nixos.org/nixos-24.05/latest-nixos-gnome-x86_64-linux.iso"
+    },
+    {
       "id": "Ubuntu_24_04_4_server_amd64",
       "label": "Ubuntu 24.04.4 LTS Server — Intel/AMD 64-bit (amd64)",
       "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso"
@@ -58,76 +193,6 @@
       "browser_url": "https://shop.netgate.com/products/netgate-installer"
     },
     {
-      "id": "LinuxMint_22_Cinnamon_amd64",
-      "label": "Linux Mint 22 Cinnamon — Intel/AMD 64-bit (amd64)",
-      "url": "https://mirrors.edge.kernel.org/linuxmint/stable/22/linuxmint-22-cinnamon-64bit.iso"
-    },
-    {
-      "id": "Fedora_41_Workstation_x86_64",
-      "label": "Fedora 41 Workstation — Intel/AMD 64-bit (x86_64)",
-      "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-41-1.4.iso"
-    },
-    {
-      "id": "Fedora_41_Workstation_aarch64",
-      "label": "Fedora 41 Workstation — ARM64 (aarch64)",
-      "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/aarch64/iso/Fedora-Workstation-Live-aarch64-41-1.4.iso"
-    },
-    {
-      "id": "Debian_13_1_netinst_amd64",
-      "label": "Debian 13.1 netinst — Intel/AMD 64-bit (amd64)",
-      "url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.1.0-amd64-netinst.iso"
-    },
-    {
-      "id": "Debian_13_1_netinst_arm64",
-      "label": "Debian 13.1 netinst — ARM64 (aarch64)",
-      "url": "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-13.1.0-arm64-netinst.iso"
-    },
-    {
-      "id": "Debian_12_7_netinst_i386",
-      "label": "Debian 12.7 netinst — Intel/AMD 32-bit (i386)",
-      "url": "https://cdimage.debian.org/cdimage/archive/12.7.0/i386/iso-cd/debian-12.7.0-i386-netinst.iso"
-    },
-    {
-      "id": "openSUSE_Leap_15_6_x86_64",
-      "label": "openSUSE Leap 15.6 DVD — Intel/AMD 64-bit (x86_64)",
-      "url": "https://download.opensuse.org/distribution/leap/15.6/iso/openSUSE-Leap-15.6-DVD-x86_64-Media.iso"
-    },
-    {
-      "id": "openSUSE_Leap_15_6_aarch64",
-      "label": "openSUSE Leap 15.6 DVD — ARM64 (aarch64)",
-      "url": "https://download.opensuse.org/ports/aarch64/distribution/leap/15.6/iso/openSUSE-Leap-15.6-DVD-aarch64-Media.iso"
-    },
-    {
-      "id": "Arch_Linux_latest_x86_64",
-      "label": "Arch Linux (latest) — Intel/AMD 64-bit (x86_64)",
-      "url": "https://mirror.rackspace.com/archlinux/iso/latest/archlinux-x86_64.iso"
-    },
-    {
-      "id": "Kali_2025_2_amd64_installer",
-      "label": "Kali Linux 2025.2 Installer — Intel/AMD 64-bit (amd64)",
-      "url": "https://cdimage.kali.org/kali-2025.2/kali-linux-2025.2-installer-amd64.iso"
-    },
-    {
-      "id": "MX_Linux_23_1_x64",
-      "label": "MX Linux 23.1 — Intel/AMD 64-bit (x86_64)",
-      "url": "https://sourceforge.net/projects/mx-linux/files/Final/MX-23.1/MX-23.1_x64.iso/download"
-    },
-    {
-      "id": "MX_Linux_23_1_i386",
-      "label": "MX Linux 23.1 — Intel/AMD 32-bit (i386)",
-      "url": "https://sourceforge.net/projects/mx-linux/files/Final/MX-23.1/MX-23.1_386.iso/download"
-    },
-    {
-      "id": "antiX_23_x64_full",
-      "label": "antiX 23 Full — Intel/AMD 64-bit (x86_64)",
-      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-23/antiX-23_x64-full.iso/download"
-    },
-    {
-      "id": "antiX_23_i386_full",
-      "label": "antiX 23 Full — Intel/AMD 32-bit (i386)",
-      "url": "https://sourceforge.net/projects/antix-linux/files/Final/antiX-23/antiX-23_386-full.iso/download"
-    },
-    {
       "id": "GParted_Live_1_5_0_1_amd64",
       "label": "GParted Live 1.5.0-1 — Intel/AMD 64-bit (amd64)",
       "url": "https://downloads.sourceforge.net/project/gparted/gparted-live-stable/1.5.0-1/gparted-live-1.5.0-1-amd64.iso"
@@ -163,44 +228,19 @@
       "url": "https://www.hirensbootcd.org/files/HBCD_PE_x64.iso"
     },
     {
-      "id": "Bodhi_Linux_6_0_0_64",
-      "label": "Bodhi Linux 6.0.0 — Intel/AMD 64-bit (x86_64)",
-      "url": "https://sourceforge.net/projects/bodhilinux/files/6.0.0/bodhi-6.0.0-64.iso/download"
+      "id": "Ubuntu_24_04_3_Surface_amd64",
+      "label": "Ubuntu 24.04.3 — Intel/AMD 64-bit (Surface devices, .iso)",
+      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-desktop-amd64.iso"
     },
     {
-      "id": "Bodhi_Linux_5_1_0_32",
-      "label": "Bodhi Linux 5.1.0 — Intel/AMD 32-bit (i386)",
-      "url": "https://sourceforge.net/projects/bodhilinux/files/5.1.0/bodhi-5.1.0-32.iso/download"
+      "id": "Android_x86_for_Surface_amd64",
+      "label": "Android-x86 — Intel/AMD 64-bit (Surface/Tablet friendly, .iso)",
+      "url": "https://downloads.sourceforge.net/project/android-x86/releases/9.0-r2/android-x86_64-9.0-r2.iso"
     },
     {
-      "id": "Q4OS_5_2_x64",
-      "label": "Q4OS 5.2 — Intel/AMD 64-bit (x86_64)",
-      "url": "https://sourceforge.net/projects/q4os/files/stable/q4os-5.2-x64.r1.iso/download"
-    },
-    {
-      "id": "Q4OS_5_2_i386",
-      "label": "Q4OS 5.2 — Intel/AMD 32-bit (i386)",
-      "url": "https://sourceforge.net/projects/q4os/files/stable/q4os-5.2-i386.r1.iso/download"
-    },
-    {
-      "id": "Ubuntu_Studio_24_04_3_amd64",
-      "label": "Ubuntu Studio 24.04.3 — Intel/AMD 64-bit (amd64)",
-      "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/24.04.3/release/ubuntustudio-24.04.3-dvd-amd64.iso"
-    },
-    {
-      "id": "ParrotOS_5_2_amd64",
-      "label": "Parrot OS 5.2 Security — Intel/AMD 64-bit (amd64)",
-      "url": "https://download.parrot.sh/parrot/iso/5.2/Parrot-security-5.2_amd64.iso"
-    },
-    {
-      "id": "ParrotOS_5_2_arm64",
-      "label": "Parrot OS 5.2 Security — ARM64 (aarch64)",
-      "url": "https://download.parrot.sh/parrot/iso/5.2/Parrot-security-5.2_arm64.iso"
-    },
-    {
-      "id": "TinyCore_15_i386",
-      "label": "TinyCore 15 — Intel/AMD 32-bit (i386)",
-      "url": "http://tinycorelinux.net/15.x/x86/release/TinyCore-15.0.iso"
+      "id": "Xbox_Ubuntu_Server_amd64_note",
+      "label": "Xbox (UEFI-enabled) — Use standard Ubuntu Server ISO (manual steps)",
+      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso"
     },
     {
       "id": "RaspberryPi_OS_Bookworm_Lite_arm64_2024_10_22",
@@ -261,41 +301,6 @@
       "id": "GrapheneOS_Pixel6_factory",
       "label": "GrapheneOS — Pixel 6 (factory image, .zip, flashing tools required)",
       "url": "https://releases.grapheneos.org/oriole-factory-2024100400.zip"
-    },
-    {
-      "id": "NixOS_24_05_GNOME_x86_64",
-      "label": "NixOS 24.05 GNOME — Intel/AMD 64-bit (x86_64, Surface-friendly, .iso)",
-      "url": "https://channels.nixos.org/nixos-24.05/latest-nixos-gnome-x86_64-linux.iso"
-    },
-    {
-      "id": "Ubuntu_24_04_3_Surface_amd64",
-      "label": "Ubuntu 24.04.3 — Intel/AMD 64-bit (Surface devices, .iso)",
-      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-desktop-amd64.iso"
-    },
-    {
-      "id": "Xubuntu_24_04_4_desktop_amd64",
-      "label": "Xubuntu 24.04.4 LTS Desktop — Intel/AMD 64-bit (amd64)",
-      "url": "https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/xubuntu-24.04.4-desktop-amd64.iso"
-    },
-    {
-      "id": "Xubuntu_26_04_1_desktop_amd64",
-      "label": "Xubuntu 26.04.1 LTS Desktop — Intel/AMD 64-bit (amd64)",
-      "url": "https://cdimage.ubuntu.com/xubuntu/releases/26.04/release/xubuntu-26.04.1-desktop-amd64.iso"
-    },
-    {
-      "id": "Ubuntu_26_04_1_desktop_amd64",
-      "label": "Ubuntu 26.04.1 LTS Desktop — Intel/AMD 64-bit (amd64)",
-      "url": "https://releases.ubuntu.com/26.04/ubuntu-26.04.1-desktop-amd64.iso"
-    },
-    {
-      "id": "Android_x86_for_Surface_amd64",
-      "label": "Android-x86 — Intel/AMD 64-bit (Surface/Tablet friendly, .iso)",
-      "url": "https://downloads.sourceforge.net/project/android-x86/releases/9.0-r2/android-x86_64-9.0-r2.iso"
-    },
-    {
-      "id": "Xbox_Ubuntu_Server_amd64_note",
-      "label": "Xbox (UEFI-enabled) — Use standard Ubuntu Server ISO (manual steps)",
-      "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso"
     }
   ]
 }

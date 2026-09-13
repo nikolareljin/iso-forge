@@ -70,6 +70,11 @@ forge_detect_arch() {
       return 0
     fi
   done
+  if [[ "$(basename -- "$iso_path")" =~ (^|[_-])386([_.-]|$) ]]; then
+    printf 'i386'
+    return 0
+  fi
+
   case "$text" in
     *x86_64*)  printf 'amd64' ;;
     *aarch64*) printf 'arm64' ;;
@@ -78,6 +83,13 @@ forge_detect_arch() {
 
 # Building for a different architecture than the host would need binfmt and a
 # static qemu in the chroot. Say so plainly rather than failing deep inside apt.
+forge_arch_supported() {
+  case "$1" in
+    amd64|arm64|i386|armhf|ppc64el|s390x|riscv64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 forge_check_arch() {
   local iso_arch="$1"
   local host_arch
@@ -90,6 +102,13 @@ forge_check_arch() {
     log_warn "Could not tell the base image's architecture; assuming it matches $host_arch."
     return 0
   fi
+  if [[ "$host_arch" == "amd64" && "$iso_arch" == "i386" ]]; then
+    if linux32 true >/dev/null 2>&1; then
+      log_info "Using host i386 compatibility for the 32-bit base image."
+      return 0
+    fi
+  fi
+
   if [[ "$iso_arch" != "$host_arch" ]]; then
     log_error "Base image is $iso_arch but this host is $host_arch."
     log_error "Cross-architecture builds are not supported; run this on an $iso_arch machine."

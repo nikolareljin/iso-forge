@@ -57,6 +57,12 @@ forge_repack_single() {
 # The overlay upperdir holds exactly what the build changed, including
 # overlayfs whiteouts for deletions, which mksquashfs preserves as the
 # character devices casper's overlay understands.
+forge_repack_antix() {
+  local rootfs="$1" iso_dir="$2" payload="$iso_dir/antiX/linuxfs"
+  forge_mksquashfs "$rootfs" "$payload" || return $?
+  ( cd "$iso_dir/antiX" && md5sum linuxfs > linuxfs.md5 ) || return 1
+}
+
 forge_repack_layered() {
   local work="$1" iso_dir="$2"
   local casper="$iso_dir/casper"
@@ -153,6 +159,7 @@ forge_repack() {
 
   case "$FORGE_LAYOUT" in
     single)  forge_repack_single "$rootfs" "$iso_dir" ;;
+    antix)   forge_repack_antix "$rootfs" "$iso_dir" ;;
     layered) forge_repack_layered "$work" "$iso_dir" ;;
     *)       log_error "Unknown layout '$FORGE_LAYOUT'"; return 2 ;;
   esac

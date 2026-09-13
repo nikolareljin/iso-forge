@@ -45,11 +45,11 @@ recipe_base_is_compatible() {
   local -a patterns=()
   mapfile -t patterns < <(recipe_list '.compatibility.base_filename_patterns')
   [[ ${#patterns[@]} -gt 0 ]] || return 0
-  # Strip a query string first: forge_resolve_base caches the download as
-  # basename "${url%%\?*}" (inc/forge/fetch.sh), so a supported URL ending
-  # "...iso?download=1" must be matched on "...iso" or dry-run and build
-  # disagree about the same base.
-  base_name=$(basename -- "${base_path%%\?*}")
+  # Strip a query string and a SourceForge-style trailing /download endpoint,
+  # so dry-run, cache naming, and real builds all use the actual ISO filename.
+  base_path="${base_path%%\?*}"
+  base_name=$(basename -- "$base_path")
+  [[ "$base_name" == "download" && "$base_path" == */download ]] && base_name=$(basename -- "$(dirname -- "$base_path")")
   # compatibility.base_filename_patterns uses POSIX extended regular
   # expressions. The interactive ISO creator uses the same dialect.
   for pattern in "${patterns[@]}"; do
@@ -98,7 +98,7 @@ recipe_validate() {
 
   # The build falls back to output.label when volume_id is absent, so the rules
   # below apply to whichever value ends up on the image. A label like
-  # "NikOS 24.04" is fine as a label and not fine as a volume id, and the error
+  # "Custom OS 24.04" is fine as a label and not fine as a volume id, and the error
   # names the field to set.
   local vol field
   vol=$(recipe_get '.output.volume_id // ""')
@@ -125,7 +125,7 @@ recipe_validate() {
   fi
 
   if recipe_has '.ansible'; then
-    [[ "$(recipe_get '.ansible.repo // ""')" != "" ]] || errors+=("ansible.repo: required when an ansible section is present")
+    [[ "$(recipe_get '.ansible.repo // .ansible.source // ""')" != "" ]] || errors+=("ansible.repo or ansible.source: required when an ansible section is present")
     [[ "$(recipe_get '.ansible.playbook // ""')" != "" ]] || errors+=("ansible.playbook: required when an ansible section is present")
   fi
 
@@ -140,7 +140,7 @@ recipe_validate() {
 }
 
 # Load recipe.yml, then recipe.local.yml on top of it when present. The local
-# layer is the same idea as NikOS's vars/local.yml: tracked defaults, untracked
+# layer is the same idea as a consumer's local configuration: tracked defaults, untracked
 # machine-specific overrides, deep-merged rather than replaced wholesale.
 recipe_load() {
   local path="$1"

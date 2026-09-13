@@ -9,6 +9,26 @@
 # manager so a recipe's own files win over any package's version of them.
 # Hooks last so they see the finished system.
 
+# Resolve a consumer-provided absolute destination without allowing its host
+# path to escape the image tree. This is used before any host-side copy.
+forge_tree_path() {
+  local tree="$1" dest="$2" tree_path candidate
+  if [[ "$dest" != /* || "$dest" == *$'\n'* || "/${dest#/}/" == *"/../"* ]]; then
+    log_error "Destination must be an absolute image path without traversal: $dest"
+    return 2
+  fi
+
+  tree_path=$(realpath -m -- "$tree") || return 1
+  candidate=$(realpath -m -- "$tree_path/${dest#/}") || return 1
+  case "$candidate" in
+    "$tree_path" | "$tree_path"/*) printf '%s\n' "$candidate" ;;
+    *)
+      log_error "Destination escapes the image tree: $dest"
+      return 2
+      ;;
+  esac
+}
+
 # Starts with a lowercase letter or digit, then lowercase letters, digits and
 # + - . _ . This is Debian's package-name grammar with underscore also allowed,
 # which is looser than policy but matches what apt accepts in practice. An
@@ -65,10 +85,13 @@ forge_apt_keys() {
       log_error "sources.keys[$i] needs both url and dest"
       return 2
     fi
-    if [[ "$dest" != /* ]]; then
+    if [[ "$dest" != /* || "$dest" == "/" ]]; then
       log_error "sources.keys[$i].dest must be an absolute path inside the image: $dest"
       return 2
     fi
+    local dest_host
+    dest_host=$(forge_tree_path "$rootfs" "$dest") || return $?
+
     forge_in_chroot "mkdir -p \"\$(dirname $(forge_q "$dest"))\" && curl -fsSL $(forge_q "$url") -o $(forge_q "$dest") && chmod 0644 $(forge_q "$dest")" || {
       log_error "Could not install key $url"
       return 1
@@ -192,6 +215,9 @@ forge_overlay() {
       log_error "overlay[$i].dest must be an absolute path inside the image: $dest"
       return 2
     fi
+    local dest_host
+    dest_host=$(forge_tree_path "$rootfs" "$dest") || return $?
+
 
     abs_src="$src"
     [[ "$abs_src" == /* ]] || abs_src="$recipe_dir/$src"
@@ -200,22 +226,60 @@ forge_overlay() {
       return 2
     fi
 
-    mkdir -p "$rootfs$(dirname "$dest")"
+    mkdir -p "$(dirname "$dest_host")"
     # A trailing slash on the source copies its contents; without one it copies
     # the directory itself. Normalise to "contents of" for directories.
     if [[ -d "$abs_src" ]]; then
-      mkdir -p "$rootfs$dest"
-      rsync -a "$abs_src/" "$rootfs$dest/" || return 1
+      mkdir -p "$dest_host"
+      rsync -a "$abs_src/" "$dest_host/" || return 1
     else
-      rsync -a "$abs_src" "$rootfs$dest" || return 1
+      rsync -a "$abs_src" "$dest_host" || return 1
+    fi
+  done
+}
+
+# Files for the live image tree (boot assets, installer metadata, and similar)
+# are applied after the root filesystem has been repacked and before checksums
+# are regenerated. Their destination is still constrained to the extracted ISO.
+forge_live_overlay() {
+  local recipe_dir="$1" iso_dir="$2"
+  local count
+  count=$(recipe_get '.live_overlay // [] | length')
+  ((count > 0)) || return 0
+
+  log_info "Copying $count live-image overlay entries"
+  local i src dest abs_src dest_host
+  for ((i = 0; i < count; i++)); do
+    src=$(recipe_get ".live_overlay[$i].src // \"\"")
+    dest=$(recipe_get ".live_overlay[$i].dest // \"\"")
+    if [[ -z "$src" || -z "$dest" ]]; then
+      log_error "live_overlay[$i] needs both src and dest"
+      return 2
+    fi
+    dest_host=$(forge_tree_path "$iso_dir" "$dest") || return $?
+
+    abs_src="$src"
+    [[ "$abs_src" == /* ]] || abs_src="$recipe_dir/$src"
+    if [[ ! -e "$abs_src" ]]; then
+      log_error "live_overlay[$i].src does not exist: $abs_src"
+      return 2
+    fi
+
+    mkdir -p "$(dirname "$dest_host")"
+    if [[ -d "$abs_src" ]]; then
+      mkdir -p "$dest_host"
+      rsync -a "$abs_src/" "$dest_host/" || return 1
+    else
+      rsync -a "$abs_src" "$dest_host" || return 1
     fi
   done
 }
 
 forge_hooks() {
+  local phase="${3:-chroot}"
   local recipe_dir="$1" rootfs="$2"
   local -a hooks
-  mapfile -t hooks < <(recipe_list '.hooks.chroot')
+  mapfile -t hooks < <(recipe_list ".hooks.$phase")
   ((${#hooks[@]})) || return 0
 
   log_info "Running ${#hooks[@]} chroot hook(s)"
@@ -247,7 +311,8 @@ forge_customize() {
   forge_apt_sources        || return $?
   forge_apt_packages       || return $?
   forge_flatpaks           || return $?
-  forge_ansible "$rootfs"  || return $?
+  forge_hooks   "$recipe_dir" "$rootfs" bootstrap || return $?
+  forge_ansible "$rootfs" "$recipe_dir" || return $?
   forge_overlay "$recipe_dir" "$rootfs" || return $?
   forge_hooks   "$recipe_dir" "$rootfs" || return $?
 }

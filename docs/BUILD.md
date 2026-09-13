@@ -70,7 +70,7 @@ over unchanged.
 An image with no `casper/` directory is refused, naming what was found. Arch is
 not supported: `archiso` shares nothing with casper and needs its own pipeline.
 
-Cross-architecture builds are refused rather than attempted. The architecture
+Cross-architecture builds are refused rather than attempted, except that an amd64 host can build an i386 image when its kernel provides 32-bit compatibility. The architecture
 is read from `.disk/info`, falling back to the image filename; when neither
 says, the check is skipped rather than guessed at.
 
@@ -142,6 +142,75 @@ run last so they see the finished system.
 same split NikOS uses for `vars/main.yml` and `vars/local.yml`: tracked
 defaults, untracked machine-specific values. Add it to `.gitignore` if it holds
 anything private.
+
+## A consumer integration
+
+A recipe lives here. An **integration** lives in the project being built, as an
+`isoforge.yml` at its root, so a project owns the description of its own image
+and IsoForge needs to know nothing about it. The two are mutually exclusive:
+a build takes exactly one of `--recipe`, `--integration` or
+`--integration-repo`.
+
+```bash
+# an integration already checked out
+sudo isoforge build --integration ../my-project
+
+# or the manifest itself, if it is not called isoforge.yml
+sudo isoforge build --integration ../my-project/isoforge.yml
+
+# or fetched, pinned to one commit
+sudo isoforge build \
+  --integration-repo https://github.com/example/my-project \
+  --ref 0123456789abcdef0123456789abcdef01234567
+```
+
+`--ref` is required with `--integration-repo` and must be a full 40- or
+64-character commit SHA. A branch or tag is refused: the point of building from
+a remote project is that the same command produces the same image later, and a
+moving ref cannot promise that.
+
+The manifest carries the same `base`, `output`, `compatibility`, `packages` and
+`overlay` sections a recipe does, with the build's identity under `integration`
+and its provisioning under `provisioning`:
+
+```yaml
+schema: 1                      # required, and must be 1
+
+integration:
+  id: my-project               # required; becomes the build name
+
+base:
+  catalog_id: Xubuntu_24_04_4_desktop_amd64
+
+output:
+  name: my-project-24.04-amd64
+  volume_id: MY_PROJECT_2404
+
+provisioning:
+  ansible:
+    playbook: site.yml         # required; a path inside the project
+    inventory: inventory/local
+    dest: /opt/isoforge/integration   # where it is staged in the image
+    skel_home: /etc/skel       # the home its per-user settings are written to
+    tags: [base, desktop]      # optional
+    extra_vars:
+      my_project_home: /etc/skel
+
+overlay:
+  target: []
+  live: []
+```
+
+The project is staged into `dest` inside the image and its playbook is run
+there. Nothing is cloned from inside the image, so a project with submodules
+works as long as they are present in the checkout being built from.
+
+`tags` and `skip_tags` are checked against the playbook's own
+`--list-tags` before provisioning, and a name the playbook does not define
+stops the build. Ansible ignores an unknown tag silently, and for `skip_tags`
+that means the image keeps whatever the manifest asked to leave out. A role
+listed in a playbook without a `tags:` key cannot be named at all, which is the
+usual cause.
 
 ## Using distrodeck
 

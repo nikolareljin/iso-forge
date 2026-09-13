@@ -59,6 +59,7 @@ cd "$ROOT_DIR"
 ./scripts/test-forge-distrodeck.sh
 ./scripts/test-forge-image.sh
 ./scripts/test-forge-nikos.sh
+./scripts/test-forge-integration.sh
 ./scripts/test-forge-ansible.sh
 ./scripts/test-rpm-manifest.sh
 
@@ -73,11 +74,13 @@ if command -v jq >/dev/null 2>&1; then
         Proxmox_VE_9_2_1_arm64 \
         OpenMediaVault_8_3_1_amd64 \
         OPNsense_26_7_dvd_amd64 \
-        TrueNAS_Community_25_10_7_amd64; do
+        TrueNAS_Community_25_10_7_amd64 \
+        antiX_26_i386_core; do
         jq -e --arg id "$catalog_id" \
             '.distros[] | select(.id == $id and (.url | startswith("https://")))' \
             config.json >/dev/null
     done
+    jq -e '[.distros[].id] as $ids | def pos($id): $ids | index($id); (pos("Ubuntu_24_04_3_desktop_amd64") < pos("Xubuntu_24_04_4_desktop_amd64") and pos("Xubuntu_26_04_1_desktop_amd64") < pos("Ubuntu_Studio_24_04_3_amd64") and pos("MX_Linux_23_1_i386") < pos("antiX_26_i386_core") and pos("antiX_26_i386_core") < pos("antiX_26_x64_full") and pos("NixOS_24_05_GNOME_x86_64") < pos("Ubuntu_24_04_4_server_amd64") and pos("pfSense_Netgate_Installer") < pos("GParted_Live_1_5_0_1_amd64") and pos("Hirens_BootCD_PE_x64") < pos("Ubuntu_24_04_3_Surface_amd64") and pos("Xbox_Ubuntu_Server_amd64_note") < pos("RaspberryPi_OS_Bookworm_Lite_arm64_2024_10_22") and pos("Ubuntu_24_04_3_preinstalled_raspi_arm64") < pos("Armbian_OrangePi5_Jammy_current") and pos("Armbian_TVBox_Amlogic_s905x_Community") < pos("Android_x86_9_0_r2_amd64"))' config.json >/dev/null
 else
     echo "warning: jq not available; skipping config schema check" >&2
 fi
