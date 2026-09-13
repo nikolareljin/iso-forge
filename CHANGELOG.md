@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning when applicable.
 
+## 2026-09-13 — 2.2.2
+
+### Fixed
+- **`scripts/test-ventoy-install-dialog.sh` failed on every run.** It checked the generated Ventoy theme with `grep -q 'selected_item_pixmap_style = "select_*.png"'`, and as a regular expression `select_*.png` means "select" followed by any number of underscores, so it never matched the literal line. The theme checks are fixed-string matches now.
+- **The same test hung when its stdin stayed open.** The stub installer reads stdin, as the real Ventoy prompt does, so run from a pipe that never closes (a backgrounded `scripts/test.sh`) it waited forever. The test now gives that call an empty stdin. It still checks that isoforge does not answer Ventoy's prompt on the user's behalf.
+- **The check that Ventoy is not forced to GPT could never fail.** It was written as `! grep -q ...`, and `set -e` ignores a negated command, so the test passed whether or not `-I -g` was present. It is an explicit `if` now, and adding the flag back fails the test.
+
 ## 2026-09-13 — 2.2.1
 
 ### Fixed
