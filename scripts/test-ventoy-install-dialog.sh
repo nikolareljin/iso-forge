@@ -68,7 +68,11 @@ EOF
   SELECTED_DEVICE=sdb
   SELECTED_IMAGES=("$tmpdir/test.iso")
   : >"${SELECTED_IMAGES[0]}"
-  flash_with_ventoy
+  # The installer inherits stdin so the real Ventoy prompt stays interactive.
+  # Give it an empty one here: an inherited pipe that never closes (a CI step,
+  # a backgrounded run) left the stub's `read` waiting forever. isoforge still
+  # must not answer on the user's behalf, which the empty answer below checks.
+  flash_with_ventoy </dev/null
   [[ ! -s "$answer" ]]
   [[ -f "$terminal_notice_seen" ]]
   [[ ! -e "$programbox_seen" ]]
@@ -102,17 +106,19 @@ EOF
   copy_isos_to_ventoy "$write_mnt" sudo
   [[ -f "$write_mnt/ventoy/theme/default/background.png" ]]
   [[ -f "$write_mnt/ventoy/theme/default/theme.txt" ]]
-  grep -q 'top = 32%' "$write_mnt/ventoy/theme/default/theme.txt"
-  grep -q 'height = 56%' "$write_mnt/ventoy/theme/default/theme.txt"
-  grep -q 'item_color = "#e5e7eb"' "$write_mnt/ventoy/theme/default/theme.txt"
-  grep -q 'selected_item_color = "#ffffff"' "$write_mnt/ventoy/theme/default/theme.txt"
-  grep -q 'selected_item_pixmap_style = "select_*.png"' "$write_mnt/ventoy/theme/default/theme.txt"
-  grep -q 'scrollbar = true' "$write_mnt/ventoy/theme/default/theme.txt"
+  # -F: these are literal lines. As a regex, `select_*.png` means "select"
+  # plus any number of underscores, so it never matched the real file.
+  grep -qF 'top = 32%' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -qF 'height = 56%' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -qF 'item_color = "#e5e7eb"' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -qF 'selected_item_color = "#ffffff"' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -qF 'selected_item_pixmap_style = "select_*.png"' "$write_mnt/ventoy/theme/default/theme.txt"
+  grep -qF 'scrollbar = true' "$write_mnt/ventoy/theme/default/theme.txt"
   [[ -f "$write_mnt/ventoy/theme/default/select_c.png" ]]
   [[ -f "$write_mnt/ventoy/theme/default/menu_c.png" ]]
   [[ -f "$write_mnt/ventoy/theme/default/slider_c.png" ]]
   [[ -f "$write_mnt/ventoy/ventoy.json" ]]
-  grep -q '"gfxmode": "max"' "$write_mnt/ventoy/ventoy.json"
+  grep -qF '"gfxmode": "max"' "$write_mnt/ventoy/ventoy.json"
   [[ -f "$write_mnt/test.iso" ]]
   [[ -f "$write_mnt/second.iso" ]]
   [[ -f "$write_mnt/third.iso" ]]
@@ -131,7 +137,12 @@ grep -q 'nikos "NikOS — dark slate"' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'reports no usable capacity' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'before any validation or Ventoy command' "$ROOT_DIR/inc/isoforge.sh"
 grep -q '"$VENTOY_BIN" -I "$dev"' "$ROOT_DIR/inc/isoforge.sh"
-! grep -q '"$VENTOY_BIN" -I -g "$dev"' "$ROOT_DIR/inc/isoforge.sh"
+# Not `! grep`: set -e ignores a command negated with `!`, so that form could
+# never fail the test however often the forced-GPT flag came back.
+if grep -qF '"$VENTOY_BIN" -I -g "$dev"' "$ROOT_DIR/inc/isoforge.sh"; then
+  echo "Ventoy is forced to GPT again; its default MBR layout was intended" >&2
+  exit 1
+fi
 grep -q 'verify_ventoy_efi_bootloader' "$ROOT_DIR/inc/isoforge.sh"
 grep -q 'cleanup_ventoy_data_mount' "$ROOT_DIR/inc/isoforge.sh"
 
