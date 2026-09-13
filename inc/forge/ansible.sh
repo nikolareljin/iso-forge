@@ -59,12 +59,10 @@ forge_ansible() {
   fi
 
   # Requirements are optional; a playbook with no collections still works.
-  # HOME is set here for the same reason it is set for the run below: galaxy
-  # installs collections under $HOME/.ansible and ansible-playbook looks for
-  # them in the same place, so installing with one HOME and running with
-  # another loses them. That failed a real build with "couldn't resolve
-  # module/action 'community.general.timezone'".
-  forge_in_chroot_soft "export HOME=$(forge_q "$skel_home") && cd $(forge_q "$dest") && [ -f requirements.yml ] && ansible-galaxy collection install -r requirements.yml || true"
+  # The prefix sets HOME for the reason given on forge_ansible_prefix: galaxy
+  # installs collections where every later ansible-playbook call must find
+  # them.
+  forge_in_chroot_soft "$(forge_ansible_prefix "$dest" "$skel_home") && [ -f requirements.yml ] && ansible-galaxy collection install -r requirements.yml || true"
 
   local -a args=()
 
@@ -87,8 +85,8 @@ forge_ansible() {
   local inventory
   inventory=$(recipe_get '.ansible.inventory // "inventory/local"')
 
-  forge_ansible_check_tags "$dest" "$playbook" "$inventory" tags "${tags[@]}" || return $?
-  forge_ansible_check_tags "$dest" "$playbook" "$inventory" skip_tags "${skips[@]}" || return $?
+  forge_ansible_check_tags "$dest" "$skel_home" "$playbook" "$inventory" tags "${tags[@]}" || return $?
+  forge_ansible_check_tags "$dest" "$skel_home" "$playbook" "$inventory" skip_tags "${skips[@]}" || return $?
 
   # HOME has to agree with skel_home for the whole run. Roles install per-user
   # tooling by shelling out to installers that honour $HOME, while their
@@ -103,7 +101,7 @@ forge_ansible() {
   #
   # --connection=local because the chroot is the target; ansible must not try
   # to ssh anywhere.
-  local cmd="export HOME=$(forge_q "$skel_home") && cd $(forge_q "$dest") && ansible-playbook $(forge_q "$playbook") -i $(forge_q "$inventory") --connection=local"
+  local cmd="$(forge_ansible_prefix "$dest" "$skel_home") && ansible-playbook $(forge_q "$playbook") -i $(forge_q "$inventory") --connection=local"
   local a
   for a in "${args[@]}"; do
     cmd+=" $(printf '%q' "$a")"
@@ -117,6 +115,18 @@ forge_ansible() {
   fi
 }
 
+# Every ansible command in the chroot starts from this prefix, so none of them
+# can disagree about HOME. forge_in_chroot starts from HOME=/root, and ansible
+# resolves collections under $HOME/.ansible: galaxy installed them into
+# /etc/skel/.ansible, and a --list-tags that did not set HOME looked in
+# /root/.ansible and failed a real build with "couldn't resolve module/action
+# 'community.general.timezone'" before the playbook ever ran. That was the
+# third copy of this prefix to be written and the only one to leave HOME out.
+forge_ansible_prefix() {
+  local dest="$1" skel_home="$2"
+  printf 'export HOME=%s && cd %s' "$(forge_q "$skel_home")" "$(forge_q "$dest")"
+}
+
 # A tag that names nothing is silently ignored by ansible-playbook, and the
 # failure mode is asymmetric: a bad `tags` entry runs less than intended, while
 # a bad `skip_tags` entry runs *more* than intended. For an image build that
@@ -125,8 +135,8 @@ forge_ansible() {
 # Roles listed in a playbook without a `tags:` key cannot be selected or
 # skipped by name at all, which is exactly the trap this catches.
 forge_ansible_check_tags() {
-  local dest="$1" playbook="$2" inventory="$3" field="$4"
-  shift 4
+  local dest="$1" skel_home="$2" playbook="$3" inventory="$4" field="$5"
+  shift 5
   local -a wanted=("$@")
   ((${#wanted[@]})) || return 0
 
@@ -142,7 +152,7 @@ forge_ansible_check_tags() {
   local listing
   # stderr is deliberately not discarded: when this fails, why it failed is
   # the only useful thing to say, and it went to /dev/null.
-  if ! listing=$(forge_in_chroot "cd $(forge_q "$dest") && ansible-playbook $(forge_q "$playbook") -i $(forge_q "$inventory") --connection=local --list-tags"); then
+  if ! listing=$(forge_in_chroot "$(forge_ansible_prefix "$dest" "$skel_home") && ansible-playbook $(forge_q "$playbook") -i $(forge_q "$inventory") --connection=local --list-tags"); then
     log_error "Could not list the playbook's tags, so ansible.$field cannot be checked."
     log_error "ansible.$field names: ${wanted[*]}"
     log_error "The playbook's own error is above. Refusing to build against an"
