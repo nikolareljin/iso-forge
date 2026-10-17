@@ -1,35 +1,63 @@
-name: Main
-on:
-  push:
-    branches: [ main ]
+name: Release
 
-# GitHub validates a called workflow's declared permissions against what the
-# caller grants, before any job runs. ci-helpers' deb-build.yml declares
-# contents: write, this repository's default workflow permission is read, and
-# main.yml granted nothing, so every run was rejected at startup and none of
-# the packaging jobs had ever executed. Read by default, write only for the
-# job whose callee asks for it.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to release (e.g. 2.3.0). Leave empty to use the pushed tag."
+        required: false
+        default: ""
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*-rc*'
+      - '[0-9]*.[0-9]*.[0-9]*-RC*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+# Read by default; write only for the jobs whose callees upload to the release.
 permissions:
   contents: read
 
+# One entry point for a release: tag.yml dispatches this file for a new tag
+# (a tag pushed by a workflow starts nothing else), and every package is built
+# here after the GitHub Release exists.
+
 jobs:
-  # ci-helpers/homebrew-package.yml defaults its tarball URL to a v-prefixed
-  # tag, but ci-helpers/auto-tag-release.yml creates bare X.Y.Z tags. Read
-  # VERSION here so the brew job can be given the URL that actually exists.
-  version:
+  resolve:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
-      - id: read
-        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+      - id: tag
+        env:
+          INPUT_TAG: ${{ inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          if [[ -z "$tag" && "$REF_TYPE" == "tag" ]]; then tag="$REF_NAME"; fi
+          [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(rc|RC)[0-9.]*)?$ ]] || { echo "::error::not a release tag: '$tag'"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: resolve
+    permissions:
+      contents: write
+    uses: nikolareljin/ci-helpers/.github/workflows/create-github-release.yml@production
+    with:
+      release_tag: ${{ needs.resolve.outputs.tag }}
 
   deb:
+    needs: [resolve, release]
     permissions:
       contents: write
     uses: nikolareljin/ci-helpers/.github/workflows/deb-build.yml@production
     with:
+      release_tag: ${{ needs.resolve.outputs.tag }}
       working_directory: "."
       prebuild_command: "git submodule update --init --recursive && ./tools/gen-man.sh"
       # dpkg-buildpackage writes the .deb to the parent of the source
@@ -41,6 +69,7 @@ jobs:
       artifact_glob: "dist/*.deb"
 
   ppa:
+    needs: [resolve, release]
     if: ${{ vars.PPA_PUBLISH_ENABLED == 'true' }}
     uses: nikolareljin/ci-helpers/.github/workflows/ppa-deb.yml@production
     with:
@@ -56,6 +85,7 @@ jobs:
       launchpad_ssh_private_key: ${{ secrets.PPA_SSH_PRIVATE_KEY }}
 
   rpm:
+    needs: [resolve, release]
     uses: nikolareljin/ci-helpers/.github/workflows/rpm-build.yml@production
     with:
       # Plain ".". The absolute path this used to carry was an attempt to work
@@ -71,7 +101,9 @@ jobs:
       artifact_glob: "dist/*.rpm"
 
   brew:
-    needs: version
+    needs: [resolve, release]
+    permissions:
+      contents: write
     uses: nikolareljin/ci-helpers/.github/workflows/homebrew-package.yml@production
     with:
       working_directory: "."
@@ -84,11 +116,9 @@ jobs:
       man_path: "docs/man/isoforge.1"
       use_libexec: "true"
       env_var: "ISOFORGE_ROOT"
-      release_repo: "nikolareljin/iso-forge"
-      tarball_url: "https://github.com/nikolareljin/iso-forge/releases/download/${{ needs.version.outputs.version }}/isoforge-${{ needs.version.outputs.version }}.tar.gz"
       exclude_paths: ".git,.github,dist,.deps_install.log,.tmp_config.json,.mockbin,test_downloads"
-      publish: ${{ vars.HOMEBREW_PUBLISH_ENABLED }}
-      tap_repo: ${{ vars.HOMEBREW_TAP_REPO }}
-      tap_branch: ${{ vars.HOMEBREW_TAP_BRANCH }}
+      release_tag: ${{ needs.resolve.outputs.tag }}
+      publish: "true"
     secrets:
-      tap_token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      tap_repo: ${{ secrets.HOMEBREW_TAP_REPO }}
+      tap_deploy_key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}

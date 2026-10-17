@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning when applicable.
 
+## Unreleased
+
+### Changed
+- **Releases are tagged and published.** Nothing tagged this repository, so
+  1.1.0 to 2.2.2 were merged as `release/X.Y.Z` pull requests and never got a
+  tag or a GitHub Release. `tag.yml` now tags `X.Y.Z` on that merge and
+  dispatches `release.yml`, which creates the Release and then builds the
+  .deb (attached), the RPM, the PPA upload (when enabled) and the Homebrew
+  formula. `main.yml`, which built packages on every push to `main` and
+  published nothing, is removed.
+- The Homebrew formula is published for every release with the tap's deploy
+  key (`HOMEBREW_TAP_DEPLOY_KEY`, `HOMEBREW_TAP_REPO` secrets); the tarball is
+  uploaded to the release so the formula's sha256 matches it.
+- `PR` fails a `release/X.Y.Z` branch whose tag already exists.
+
 ## 2026-09-13 — 2.2.2
 
 ### Fixed

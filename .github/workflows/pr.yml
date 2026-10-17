@@ -4,6 +4,13 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
+  # A release/X.Y.Z branch whose tag already exists fails here, before merge.
+  release-tag:
+    if: ${{ startsWith(github.head_ref, 'release/') }}
+    uses: nikolareljin/ci-helpers/.github/workflows/release-tag-gate.yml@production
+    with:
+      release_branch: ${{ github.head_ref }}
+
   gate:
     uses: nikolareljin/ci-helpers/.github/workflows/ci.yml@production
     with:
