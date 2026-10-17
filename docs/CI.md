@@ -2,8 +2,14 @@
 
 ## Workflows
 
-- `PR`: runs a shell syntax check for the main scripts.
-- `Main`: builds Debian packages, uploads to PPA, builds RPM artifacts, and generates Homebrew tarballs/formulas.
+- `PR`: shell syntax check and the forge tests; on a `release/X.Y.Z` branch,
+  also fails when tag `X.Y.Z` already exists.
+- `Tag Release` (`tag.yml`): on a merged `release/X.Y.Z` pull request, tags
+  `X.Y.Z` and dispatches `Release`.
+- `Release` (`release.yml`): creates the GitHub Release, then builds and
+  attaches the .deb, builds the RPM, uploads to the PPA (when enabled) and
+  publishes the Homebrew formula. Runnable by hand with `release_tag` to
+  backfill an existing tag.
 
 ## Required GitHub Secrets (PPA)
 
@@ -16,19 +22,14 @@
 - `PPA_GPG_KEY_ID`: key ID or fingerprint (non-secret).
 - `PPA_PUBLISH_ENABLED`: set to `true` to enable the PPA publish job.
 
-## Required GitHub Variables (Homebrew)
-
-- `HOMEBREW_PUBLISH_ENABLED`: set to `true` to enable Homebrew publishing.
-- `HOMEBREW_TAP_REPO`: target tap repo (e.g., `nikolareljin/homebrew-tap`).
-- `HOMEBREW_TAP_BRANCH`: optional (default `main`).
-
 ## Required GitHub Secrets (Homebrew)
 
-- `HOMEBREW_TAP_TOKEN`: GitHub token with push access to the tap repo.
+- `HOMEBREW_TAP_DEPLOY_KEY`: private half of the tap's write deploy key.
+- `HOMEBREW_TAP_REPO`: the tap, as `owner/repo`.
 
 ## PPA target
 
-Update `ppa_target` in `.github/workflows/main.yml`:
+Update `ppa_target` in `.github/workflows/release.yml`:
 
 ```
 ppa:your-launchpad-id/isoforge
@@ -38,4 +39,4 @@ ppa:your-launchpad-id/isoforge
 
 - Debian source builds use `debuild` and the `debian/` metadata in this repo.
 - RPM builds use the reusable `ci-helpers` workflow with `script-helpers` RPM helpers.
-- Homebrew builds use the reusable `ci-helpers` workflow and can optionally publish to a tap repo.
+- Homebrew builds use the reusable `ci-helpers` workflow and publish to the tap for every release.
